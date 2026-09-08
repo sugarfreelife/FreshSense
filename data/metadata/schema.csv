@@ -1,0 +1,3 @@
+image_id,food_type,freshness_label,capture_date,source,conditions
+# Phase 1: place public/small-project dataset here. Do not mix near-duplicate sessions across splits without documenting.
+# See data/README
