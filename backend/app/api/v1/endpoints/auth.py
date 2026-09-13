@@ -5,12 +5,12 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_user, get_db
 from app.core.security import create_access_token, get_password_hash, verify_password
 from app.models.user import User
-from app.schemas.auth import Token, UserCreate, UserLogin, UserOut
+from app.schemas.auth import AuthResponse, Token, UserCreate, UserLogin, UserOut
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
 def register(payload: UserCreate, db: Session = Depends(get_db)):
     existing = db.query(User).filter(User.email == payload.email).first()
     if existing:
@@ -19,16 +19,17 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
     db.add(user)
     db.commit()
     db.refresh(user)
-    return user
+    # Auto-login: frontend expects {access_token, user} so it can land on dashboard.
+    return AuthResponse(access_token=create_access_token(subject=user.id), user=UserOut.model_validate(user))
 
 
-@router.post("/login", response_model=Token)
+@router.post("/login", response_model=AuthResponse)
 def login(payload: UserLogin, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == payload.email).first()
     if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     token = create_access_token(subject=user.id)
-    return {"access_token": token, "token_type": "bearer"}
+    return AuthResponse(access_token=token, user=UserOut.model_validate(user))
 
 
 @router.post("/token", response_model=Token, include_in_schema=False)
