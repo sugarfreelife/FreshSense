@@ -16,5 +16,7 @@ class ExpiryStatus(str, Enum):
 
 class ModelType(str, Enum):
     REAL_MODEL = "real_model"
+    TRAINED = "trained"
+    ADAPTIVE = "adaptive"
     PROTOTYPE = "prototype"
     NOT_IMPLEMENTED = "not_implemented"

@@ -2,10 +2,14 @@
 
 from PIL import Image
 
+MAX_IMAGE_PIXELS = 40_000_000
+
 
 def verify_image(path: str) -> bool:
     try:
         with Image.open(path) as img:
+            if img.width <= 0 or img.height <= 0 or img.width * img.height > MAX_IMAGE_PIXELS:
+                return False
             img.verify()
         return True
     except Exception:
@@ -13,4 +17,5 @@ def verify_image(path: str) -> bool:
 
 
 def open_rgb(path: str) -> Image.Image:
-    return Image.open(path).convert("RGB")
+    with Image.open(path) as image:
+        return image.convert("RGB")

@@ -4,6 +4,20 @@ import Layout from "../components/Layout";
 import ScanForm, { type ScanFormValue } from "../components/ScanForm";
 import { useToast } from "../components/Toast";
 
+function formatUploadError(error: Error): string {
+  const responseData = (error as Error & { response?: { data?: { detail?: unknown } } }).response?.data;
+  const detail = responseData?.detail;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const messages = detail.flatMap((item) => {
+      if (!item || typeof item !== "object" || !("msg" in item)) return [];
+      return typeof item.msg === "string" ? [item.msg] : [];
+    });
+    if (messages.length) return messages.join("; ");
+  }
+  return error.message || "Upload failed. Please check your connection and retry.";
+}
+
 export default function Scan() {
   const navigate = useNavigate();
   const { push } = useToast();
@@ -15,8 +29,8 @@ export default function Scan() {
         push("Analysis complete.", "success");
         navigate(`/result/${String(scan.id)}`);
       },
-      onError: () => {
-        push("Analysis failed. Check connection and try again.", "error");
+      onError: (error) => {
+        push(formatUploadError(error), "error");
       }
     });
   };
@@ -31,7 +45,7 @@ export default function Scan() {
         <ScanForm onSubmit={handleSubmit} isSubmitting={createScan.isPending} />
         {createScan.isError && (
           <p role="alert" className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-            Upload failed. Please check your connection and retry.
+            {formatUploadError(createScan.error)}
           </p>
         )}
       </div>

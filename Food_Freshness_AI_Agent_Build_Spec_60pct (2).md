@@ -62,7 +62,7 @@ The 60% milestone must establish a strong, runnable foundation containing:
 - sensor-data API and data model
 - multimodal architecture interfaces
 - model/evaluation scaffolding
-- Docker/development setup
+- Local development setup
 - documentation
 - tests for important backend/frontend functionality
 
@@ -1238,28 +1238,6 @@ History displays scan
 
 ---
 
-# 31. Docker
-
-Provide:
-
-```text
-docker-compose.yml
-```
-
-for local development.
-
-At minimum:
-
-```text
-frontend
-backend
-postgres
-```
-
-Do not force the ML model into a separate container unless it genuinely simplifies the architecture.
-
----
-
 # 32. Environment Configuration
 
 Provide:
@@ -1271,7 +1249,7 @@ Provide:
 Potential variables:
 
 ```text
-DATABASE_URL=
+DATABASE_URL=postgresql+psycopg2://freshsense:freshsense@localhost:5432/freshsense
 JWT_SECRET=
 MODEL_PATH=
 UPLOAD_DIR=
@@ -1413,7 +1391,7 @@ Build in this order:
 28. Error handling.
 29. Loading states.
 30. Security validation.
-31. Docker.
+31. Local development setup.
 32. Documentation.
 33. PWA testing.
 34. Project status tracking.

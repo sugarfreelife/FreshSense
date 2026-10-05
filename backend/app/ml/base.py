@@ -7,7 +7,7 @@ from typing import Any
 class ModelInterface(ABC):
     name: str = "base"
     version: str = "v0.0"
-    model_type: str = "not_implemented"  # real_model | prototype | not_implemented
+    model_type: str = "not_implemented"  # trained | prototype | adaptive | not_implemented
 
     @abstractmethod
     def predict(self, inputs: Any) -> dict:

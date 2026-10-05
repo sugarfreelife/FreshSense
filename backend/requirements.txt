@@ -7,7 +7,7 @@ python-jose[cryptography]
 passlib[bcrypt]
 bcrypt==4.0.1
 python-multipart
-pillow
+pillow>=11.3
 pydantic>=2
 pydantic-settings
 python-dotenv

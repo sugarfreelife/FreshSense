@@ -24,8 +24,18 @@ def test_upload_and_crud(client, auth_headers):
     assert one.status_code == 200
     assert one.json()["assessment"] is not None
 
+    sensor = client.post(
+        "/api/v1/sensors/readings",
+        json={"scan_id": scan_id, "gas_value": 150.0},
+        headers=auth_headers,
+    )
+    assert sensor.status_code == 201, sensor.text
+
+    recalculated = client.post("/api/v1/assessments", json={"scan_id": scan_id}, headers=auth_headers)
+    assert recalculated.status_code == 200, recalculated.text
+
     asmt = client.get(f"/api/v1/assessments/{scan_id}", headers=auth_headers)
-    assert asmt.status_code == 200
+    assert asmt.status_code == 200 and asmt.json() == recalculated.json()
 
     d = client.delete(f"/api/v1/scans/{scan_id}", headers=auth_headers)
     assert d.status_code == 200

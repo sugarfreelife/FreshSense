@@ -13,7 +13,8 @@ def validate_extension(filename: str) -> bool:
 
 
 def validate_mime(content_type: str | None) -> bool:
-    return content_type in ALLOWED_MIME_TYPES
+    mime_type = (content_type or "").split(";", 1)[0].strip().lower()
+    return mime_type in ALLOWED_MIME_TYPES
 
 
 def validate_size(size_bytes: int) -> bool:

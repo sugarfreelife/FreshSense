@@ -22,9 +22,9 @@
 ## Phase 1 — COMPLETED (foundation + core workflow + multimodal interfaces)
 
 Implemented:
-- Backend: FastAPI `/api/v1` (auth, scans, vision, ocr, sensors, assessments, health), SQLite fallback/Postgres-ready, JWT, upload validation (ext+MIME+10MB+PIL), vision prototype, OCR date parser, sensor providers, fusion/decision services, full test suite
+- Backend: FastAPI `/api/v1` (auth, scans, vision, ocr, sensors, assessments, health), PostgreSQL, JWT, upload validation (ext+MIME+10MB+PIL), vision prototype, OCR date parser, sensor providers, fusion/decision services, full test suite
 - Frontend: PWA (manifest, SW autoUpdate, offline.html, icons), Landing/Login/Register/Dashboard/Scan/Result/History, camera+upload ScanForm, TanStack Query + axios JWT, mobile bottom nav
-- Infra: docker-compose (postgres/backend/frontend), .env.examples, data/ layout + metadata schema, ml/evaluation scaffold, docs
+- Infra: local environment examples, data/ layout + metadata schema, ml/evaluation scaffold, docs
 
 Tests Run:
 - `python -m pytest tests -q` → 25 passed
@@ -43,7 +43,3 @@ Known Issues:
 
 Next Phase (Phase 2 research):
 - Day0→DayN aging dataset, sensor calibration, trained lightweight model, learned + ablated fusion, shelf-life regression, Grad-CAM, ONNX/TFLite edge quant, full benchmarking
-
-## Docker update (2026-09-08)
-- Added `backend/Dockerfile` (python:3.11-slim + pip install + uvicorn) and `frontend/Dockerfile` (node:20-alpine + npm install + vite dev); removed obsolete `version:` key from `docker-compose.yml`.
-- `docker compose build` → PASS (backend ~210MB, frontend ~142MB). Run with `docker compose up --build`.

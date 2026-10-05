@@ -1,7 +1,4 @@
-"""Fusion: normalize evidence from vision / sensor / ocr modalities.
-
-Handles missing modalities honestly — only lists modalities actually present.
-"""
+"""Normalize evidence and identify which inputs can affect the decision."""
 
 
 def normalize_evidence(
@@ -21,9 +18,7 @@ def normalize_evidence(
         }
         modalities_used.append("vision")
 
-    if sensor is not None and any(
-        sensor.get(k) is not None for k in ("gas_value", "temperature", "humidity")
-    ):
+    if sensor is not None and sensor.get("gas_value") is not None:
         evidence["sensor"] = {
             "gas_value": sensor.get("gas_value"),
             "temperature": sensor.get("temperature"),
@@ -31,11 +26,10 @@ def normalize_evidence(
         }
         modalities_used.append("sensor")
 
-    if ocr is not None and (ocr.get("date_detected") or ocr.get("raw_text")):
+    if ocr is not None and ocr.get("expiry_date"):
         evidence["ocr"] = {
             "expiry_date": ocr.get("expiry_date"),
-            "date_detected": bool(ocr.get("date_detected")),
-            "raw_text": ocr.get("raw_text", ""),
+            "date_detected": True,
         }
         modalities_used.append("ocr")
 

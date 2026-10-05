@@ -18,11 +18,13 @@ class FoodScan(Base):
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     image_path: Mapped[str] = mapped_column(String(1024), nullable=False)
     food_label: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     vision: Mapped["VisionPrediction | None"] = relationship(back_populates="scan", cascade="all, delete-orphan", uselist=False)
     ocr: Mapped["OCRResult | None"] = relationship(back_populates="scan", cascade="all, delete-orphan", uselist=False)
     assessment: Mapped["FinalAssessment | None"] = relationship(back_populates="scan", cascade="all, delete-orphan", uselist=False)
+    sensor_readings: Mapped[list["SensorReading"]] = relationship(back_populates="scan", lazy="selectin")
 
 
 class VisionPrediction(Base):
@@ -35,6 +37,8 @@ class VisionPrediction(Base):
     confidence: Mapped[float] = mapped_column(Float, nullable=False)
     model_version: Mapped[str] = mapped_column(String(100), nullable=False)
     model_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    confidence_kind: Mapped[str] = mapped_column(String(50), default="heuristic_score", nullable=False)
+    visual_evidence: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     scan: Mapped[FoodScan] = relationship(back_populates="vision")
@@ -63,6 +67,8 @@ class SensorReading(Base):
     temperature: Mapped[float | None] = mapped_column(Float, nullable=True)
     humidity: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    scan: Mapped[FoodScan | None] = relationship(back_populates="sensor_readings")
 
 
 class FinalAssessment(Base):

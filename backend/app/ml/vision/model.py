@@ -1,14 +1,14 @@
-"""Vision prototype model wrapper."""
+"""Vision model wrapper (trained local artifact or disclosed prototype fallback)."""
 
 from app.ml.base import ModelInterface
-from app.ml.vision.inference import MODEL_VERSION, heuristic_predict
+from app.ml.vision.inference import predict_image
 
 
-class VisionPrototype(ModelInterface):
+class VisionModel(ModelInterface):
     name = "vision"
-    version = MODEL_VERSION
-    model_type = "prototype"
+    version = "adaptive-local-vision"
+    model_type = "adaptive"
 
     def predict(self, inputs: str) -> dict:
         """inputs: path to image file."""
-        return heuristic_predict(inputs)
+        return predict_image(inputs)

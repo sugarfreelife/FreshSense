@@ -24,23 +24,95 @@ const AuthResponseSchema = z.object({
 });
 export type AuthResponse = z.infer<typeof AuthResponseSchema>;
 
-export const ScanSchema = z.object({
+const PassportEvidenceSchema = z.object({
+  key: z.enum(["vision", "expiry", "sensor"]),
+  title: z.string(),
+  state: z.enum(["used", "warning", "missing", "context"]),
+  observation: z.string(),
+  explanation: z.string()
+});
+
+const PassportEventSchema = z.object({
+  key: z.string(),
+  title: z.string(),
+  state: z.enum(["complete", "warning", "missing"]),
+  detail: z.string(),
+  occurred_at: z.string().nullable().optional()
+});
+
+const PassportSchema = z.object({
+  summary: z.string(),
+  explanation: z.string(),
+  evidence: z.array(PassportEvidenceSchema),
+  timeline: z.array(PassportEventSchema),
+  limitations: z.array(z.string())
+});
+
+const NestedScanSchema = z.object({
   id: z.union([z.string(), z.number()]),
   image_url: z.string().optional().nullable(),
-  food_type: z.string().optional().nullable(),
-  freshness: z.string().optional().nullable(),
-  freshness_label: z.string().optional().nullable(),
-  confidence: z.number().optional().nullable(),
-  expiry_date: z.string().optional().nullable(),
-  shelf_life_days: z.number().optional().nullable(),
-  voc_index: z.number().optional().nullable(),
-  temperature_c: z.number().optional().nullable(),
-  humidity_pct: z.number().optional().nullable(),
-  recommendation: z.string().optional().nullable(),
-  sources: z.array(z.string()).optional().nullable(),
-  warnings: z.array(z.string()).optional().nullable(),
-  created_at: z.string().optional().nullable()
+  food_label: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+  created_at: z.string(),
+  vision: z.object({
+    food_type: z.string(),
+    freshness: z.string(),
+    confidence: z.number(),
+    model_version: z.string(),
+    model_type: z.string(),
+    confidence_kind: z.string().optional(),
+    visual_evidence: z.record(z.string(), z.number()).optional()
+  }).nullable().optional(),
+  ocr: z.object({
+    raw_text: z.string(),
+    expiry_date: z.string().nullable().optional(),
+    date_detected: z.boolean(),
+    created_at: z.string().optional()
+  }).nullable().optional(),
+  sensor: z.object({
+    gas_value: z.number().nullable().optional(),
+    temperature: z.number().nullable().optional(),
+    humidity: z.number().nullable().optional(),
+    created_at: z.string()
+  }).nullable().optional(),
+  assessment: z.object({
+    freshness: z.string(),
+    confidence: z.number(),
+    recommendation: z.string(),
+    warnings: z.array(z.string()),
+    modalities_used: z.array(z.string()),
+    expiry_status: z.string(),
+    days_remaining: z.number().nullable().optional(),
+    created_at: z.string().optional()
+  }).nullable().optional(),
+  passport: PassportSchema
 });
+
+export const ScanSchema = NestedScanSchema.transform((scan) => ({
+  id: scan.id,
+  image_url: scan.image_url
+    ? new URL(scan.image_url, apiClient.defaults.baseURL).toString()
+    : null,
+  food_type: scan.food_label ?? (scan.vision?.food_type === "unknown" ? null : scan.vision?.food_type ?? null),
+  freshness: scan.assessment?.freshness ?? scan.vision?.freshness ?? null,
+  freshness_label: scan.assessment?.freshness ?? scan.vision?.freshness ?? null,
+  confidence: scan.assessment?.confidence ?? null,
+  model_score: scan.vision?.confidence ?? null,
+  model_type: scan.vision?.model_type ?? null,
+  confidence_kind: scan.vision?.confidence_kind ?? null,
+  visual_evidence: scan.vision?.visual_evidence ?? {},
+  expiry_date: scan.ocr?.expiry_date ?? null,
+  shelf_life_days: scan.assessment?.days_remaining ?? null,
+  voc_index: scan.sensor?.gas_value ?? null,
+  temperature_c: scan.sensor?.temperature ?? null,
+  humidity_pct: scan.sensor?.humidity ?? null,
+  recommendation: scan.assessment?.recommendation ?? null,
+  sources: scan.assessment?.modalities_used ?? [],
+  warnings: scan.assessment?.warnings ?? [],
+  notes: scan.notes ?? null,
+  created_at: scan.created_at,
+  passport: scan.passport
+}));
 export type Scan = z.infer<typeof ScanSchema>;
 
 const ScanListSchema = z.array(ScanSchema);
@@ -154,7 +226,7 @@ export function useCreateScan(): UseMutationResult<Scan, Error, CreateScanInput>
   return useMutation({
     mutationFn: async (input: CreateScanInput) => {
       const form = new FormData();
-      form.append("image", input.image, input.image.name || "capture.jpg");
+      form.append("file", input.image, input.image.name || "capture.jpg");
       if (input.food_type) form.append("food_type", input.food_type);
       if (input.temperature_c !== undefined)
         form.append("temperature_c", String(input.temperature_c));
@@ -163,9 +235,7 @@ export function useCreateScan(): UseMutationResult<Scan, Error, CreateScanInput>
       if (input.voc_index !== undefined)
         form.append("voc_index", String(input.voc_index));
       if (input.notes) form.append("notes", input.notes);
-      const res = await apiClient.post("/scans", form, {
-        headers: { "Content-Type": "multipart/form-data" }
-      });
+      const res = await apiClient.post("/scans", form);
       return ScanSchema.parse(res.data);
     },
     onSuccess: () => {

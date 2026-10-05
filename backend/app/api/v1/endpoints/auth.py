@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
@@ -17,7 +18,11 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Email already registered")
     user = User(email=payload.email, hashed_password=get_password_hash(payload.password))
     db.add(user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Email already registered") from exc
     db.refresh(user)
     # Auto-login: frontend expects {access_token, user} so it can land on dashboard.
     return AuthResponse(access_token=create_access_token(subject=user.id), user=UserOut.model_validate(user))

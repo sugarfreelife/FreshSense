@@ -8,6 +8,8 @@
 secrets/
 
 # ================= Python / FastAPI backend =================
+backend/models/*.json
+backend/models/*.tmp
 __pycache__/
 *.py[cod]
 *$py.class
@@ -27,7 +29,7 @@ htmlcov/
 dist/
 build/
 
-# SQLite dev databases (Postgres is used in Docker/prod)
+# SQLite development databases
 *.db
 *.sqlite
 *.sqlite3
@@ -64,6 +66,3 @@ desktop.ini
 *.swp
 *.swo
 *~
-
-# ================= Docker =================
-# (images/volumes are external; keep Dockerfiles + compose committed)

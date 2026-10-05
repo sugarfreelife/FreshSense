@@ -19,7 +19,9 @@ def decide(
     modalities: list[str] = list(modalities_used) if modalities_used else []
 
     vision_freshness = (vision or {}).get("freshness")
-    vision_conf = float((vision or {}).get("confidence") or 0.0)
+    raw_vision_confidence = (vision or {}).get("confidence")
+    has_vision_confidence = raw_vision_confidence is not None
+    vision_conf = float(raw_vision_confidence) if has_vision_confidence else 0.0
     gas = (sensor or {}).get("gas_value")
 
     # Resolve expiry date: explicit param wins, else OCR payload
@@ -53,21 +55,21 @@ def decide(
         warnings.append("EXPIRED: product is past its expiry date.")
     elif status == ExpiryStatus.EXPIRING_SOON.value:
         freshness = vision_freshness if vision_freshness else FreshnessEnum.MODERATELY_FRESH.value
-        confidence = vision_conf if vision_conf else 0.55
+        confidence = vision_conf if has_vision_confidence else 0.55
         recommendation = "CONSUME_SOON"
         warnings.append("EXPIRING_SOON: consume within a few days.")
     elif vision_freshness == FreshnessEnum.SPOILED.value:
         freshness = FreshnessEnum.SPOILED.value
-        confidence = vision_conf or 0.7
+        confidence = vision_conf if has_vision_confidence else 0.7
         recommendation = "CAUTION_DO_NOT_CONSUME"
         warnings.append("SPOILAGE_INDICATED: visual cues suggest spoilage.")
     elif vision_freshness == FreshnessEnum.MODERATELY_FRESH.value:
         freshness = FreshnessEnum.MODERATELY_FRESH.value
-        confidence = vision_conf or 0.6
+        confidence = vision_conf if has_vision_confidence else 0.6
         recommendation = "CONSUME_SOON"
     elif vision_freshness == FreshnessEnum.FRESH.value:
         freshness = FreshnessEnum.FRESH.value
-        confidence = vision_conf or 0.7
+        confidence = vision_conf if has_vision_confidence else 0.7
         recommendation = "CONSUME_NOW" if gas is None or gas < HIGH_VOC_THRESHOLD else "CONSUME_SOON"
         if gas is not None and gas >= HIGH_VOC_THRESHOLD:
             warnings.append("ELEVATED_VOC: gas reading is high despite fresh appearance; consume soon.")

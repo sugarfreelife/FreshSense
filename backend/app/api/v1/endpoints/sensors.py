@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
-from app.models.scan import SensorReading
+from app.models.scan import FoodScan, SensorReading
 from app.models.user import User
 from app.schemas.sensor import SensorReadingCreate, SensorReadingOut
 from app.sensors.service import validate_reading
@@ -19,6 +19,14 @@ def create_reading(
     ok, errors = validate_reading(payload.gas_value, payload.temperature, payload.humidity)
     if not ok:
         raise HTTPException(status_code=400, detail="; ".join(errors))
+    if payload.scan_id is not None:
+        scan = (
+            db.query(FoodScan)
+            .filter(FoodScan.id == payload.scan_id, FoodScan.user_id == current.id)
+            .first()
+        )
+        if scan is None:
+            raise HTTPException(status_code=404, detail="Scan not found")
     reading = SensorReading(
         scan_id=payload.scan_id,
         user_id=current.id,

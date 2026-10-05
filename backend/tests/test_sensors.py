@@ -26,4 +26,4 @@ def test_sensor_endpoints(client, auth_headers):
 
 def test_sensor_invalid_rejected(client, auth_headers):
     r = client.post("/api/v1/sensors/readings", json={"gas_value": 99999.0}, headers=auth_headers)
-    assert r.status_code == 400
+    assert r.status_code == 422
