@@ -33,6 +33,7 @@ def build_passport(
     )
 
     evidence: list[dict] = []
+    conflicts: list[dict] = []
     limitations: list[str] = []
     timeline: list[dict] = [
         {
@@ -99,6 +100,17 @@ def build_passport(
         })
 
     expiry_date = (ocr or {}).get("expiry_date")
+    if (
+        vision
+        and vision.get("freshness") == "fresh"
+        and expiry_date
+        and assessment.get("expiry_status") == "expired"
+    ):
+        conflicts.append({
+            "key": "vision_expiry",
+            "title": "Appearance and date disagree",
+            "detail": "The image estimate looks fresh, but the detected package date has passed. Verify the label and follow the expiry warning.",
+        })
     if expiry_date:
         days = assessment.get("days_remaining")
         expiry_status = assessment.get("expiry_status")
@@ -163,6 +175,12 @@ def build_passport(
             values.append(f"{sensor['humidity']:g}% RH")
         gas_value = sensor.get("gas_value")
         gas_high = gas_value is not None and gas_value >= 700
+        if gas_high and vision and vision.get("freshness") == "fresh":
+            conflicts.append({
+                "key": "vision_sensor",
+                "title": "Appearance and VOC reading disagree",
+                "detail": "The image estimate looks fresh, while the VOC reading is elevated. The reading is a warning signal, not a safety measurement.",
+            })
         state = "warning" if gas_high else ("used" if gas_value is not None else "context")
         explanation = (
             "VOC is at or above the current 700-unit rule threshold."
@@ -221,5 +239,6 @@ def build_passport(
         "explanation": explanation,
         "evidence": evidence,
         "timeline": timeline,
+        "conflicts": conflicts,
         "limitations": limitations,
     }

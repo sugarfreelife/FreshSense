@@ -43,3 +43,5 @@ PWA → register/login → dashboard → scan (camera/upload + optional sensor v
 
 See `ARCHITECTURE.md`, `API.md`, `DEVELOPMENT.md`, `PHASES.md`, `PROJECT_STATUS.md`.
 See [backend/AI_MODEL.md](backend/AI_MODEL.md) for the local training workflow and its data requirements.
+See [data/README.md](data/README.md) for paired-data collection, leakage-safe splits, and image-versus-Passport evaluation. The repository currently has no labeled dataset, so no training or comparative performance claim is available yet.
+See [NOVELTY.md](NOVELTY.md) for the proposed contribution and evaluation criteria.

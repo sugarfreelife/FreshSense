@@ -5,7 +5,7 @@ from math import exp, isfinite
 from pathlib import Path
 
 from app.core.enums import FreshnessEnum
-from app.ml.vision.features import FEATURE_NAMES, extract_image_features
+from app.ml.vision.features import FEATURE_NAMES, LEGACY_FEATURE_NAMES, extract_image_features
 
 MODEL_VERSION = "vision-v0.2-prototype"
 TRAINED_MODEL_FILENAME = "vision_model.json"
@@ -50,7 +50,8 @@ def _predict_with_artifact(image_path: str, artifact_path: Path) -> dict:
         raise ValueError("Trained vision model artifact must be a JSON object.")
     if artifact.get("schema_version") != 1:
         raise ValueError("Trained vision model artifact version is not supported.")
-    if artifact.get("feature_names") != list(FEATURE_NAMES):
+    artifact_features = artifact.get("feature_names")
+    if artifact_features not in (list(FEATURE_NAMES), list(LEGACY_FEATURE_NAMES)):
         raise ValueError("Trained vision model feature schema does not match this application.")
     classes = [value.value for value in FreshnessEnum]
     if artifact.get("classes") != classes:
@@ -60,7 +61,7 @@ def _predict_with_artifact(image_path: str, artifact_path: Path) -> dict:
     scales = artifact.get("scales")
     weights = artifact.get("weights")
     biases = artifact.get("bias")
-    feature_count = len(FEATURE_NAMES)
+    feature_count = len(artifact_features)
     if (
         not isinstance(means, list)
         or not isinstance(scales, list)
@@ -79,7 +80,7 @@ def _predict_with_artifact(image_path: str, artifact_path: Path) -> dict:
     if any(scale <= 0 for scale in scales):
         raise ValueError("Trained vision model feature scales must be positive.")
 
-    vector, evidence = extract_image_features(image_path)
+    vector, evidence = extract_image_features(image_path, tuple(artifact_features))
     normalized = [(value - means[index]) / scales[index] for index, value in enumerate(vector)]
     logits = [
         sum(weight * value for weight, value in zip(class_weights, normalized, strict=True)) + bias

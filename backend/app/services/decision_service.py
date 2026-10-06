@@ -14,6 +14,7 @@ def decide(
     ocr: dict | None = None,
     expiry_date: date | str | None = None,
     modalities_used: list[str] | None = None,
+    reference_date: date | None = None,
 ) -> dict:
     warnings: list[str] = []
     modalities: list[str] = list(modalities_used) if modalities_used else []
@@ -34,7 +35,7 @@ def decide(
         except ValueError:
             exp_date = None
 
-    expiry = compute_expiry(exp_date)
+    expiry = compute_expiry(exp_date, today=reference_date)
     status = expiry["status"]
 
     # --- deterministic rules ---

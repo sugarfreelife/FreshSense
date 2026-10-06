@@ -136,6 +136,20 @@ export default function ResultCard({ scan }: { scan: { id: Scan["id"] } & Partia
           <p className="mt-1 text-sm font-medium text-emerald-800">{scan.passport.summary}</p>
           <p className="mt-2 text-sm text-slate-600">{scan.passport.explanation}</p>
 
+          {scan.passport.conflicts.length > 0 && (
+            <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3" role="status">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-amber-900">Signals that disagree</h4>
+              <ul className="mt-2 space-y-2">
+                {scan.passport.conflicts.map((conflict) => (
+                  <li key={conflict.key}>
+                    <p className="text-sm font-semibold text-amber-900">{conflict.title}</p>
+                    <p className="text-sm text-amber-900">{conflict.detail}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <h4 className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">Evidence used</h4>
           <div className="mt-2 grid gap-2">
             {scan.passport.evidence.map((item) => (

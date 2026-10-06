@@ -10,6 +10,8 @@ secrets/
 # ================= Python / FastAPI backend =================
 backend/models/*.json
 backend/models/*.tmp
+data/downloads/
+data/extracted/
 __pycache__/
 *.py[cod]
 *$py.class
@@ -50,6 +52,12 @@ uploads/*
 !uploads/.gitkeep
 backend/uploads/*
 !backend/uploads/.gitkeep
+
+# Locally collected evaluation material and generated reports
+data/images/
+data/reports/
+data/metadata/labels*.csv
+data/metadata/paired_collection.csv
 
 # ================= Logs / temp =================
 *.log

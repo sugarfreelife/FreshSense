@@ -62,11 +62,18 @@ class PassportEventOut(BaseModel):
     occurred_at: datetime | None = None
 
 
+class PassportConflictOut(BaseModel):
+    key: Literal["vision_sensor", "vision_expiry"]
+    title: str
+    detail: str
+
+
 class FreshnessPassportOut(BaseModel):
     summary: str
     explanation: str
     evidence: list[PassportEvidenceOut] = Field(default_factory=list)
     timeline: list[PassportEventOut] = Field(default_factory=list)
+    conflicts: list[PassportConflictOut] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
 
 

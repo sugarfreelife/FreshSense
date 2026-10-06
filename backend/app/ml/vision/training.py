@@ -24,14 +24,15 @@ def _normalize(vector: list[float], means: list[float], scales: list[float]) -> 
 
 def _read_manifest(manifest: Path) -> tuple[list[tuple[list[float], int]], list[tuple[list[float], int]]]:
     rows: dict[str, list[tuple[list[float], int]]] = {"train": [], "validation": []}
+    groups: dict[str, set[str]] = {"train": set(), "validation": set()}
     with manifest.open(newline="", encoding="utf-8-sig") as source:
         reader = csv.DictReader(source)
-        required = {"image_path", "label", "split"}
-        if not reader.fieldnames or not required.issubset(reader.fieldnames):
-            raise ValueError("Manifest needs image_path,label,split columns.")
+        required = {"image_path", "split"}
+        if not reader.fieldnames or not required.issubset(reader.fieldnames) or not ({"label", "freshness_label"} & set(reader.fieldnames)):
+            raise ValueError("Manifest needs image_path, label (or freshness_label), and split columns.")
         for line, row in enumerate(reader, start=2):
             split = (row.get("split") or "").strip().lower()
-            label = (row.get("label") or "").strip().lower().replace(" ", "_")
+            label = (row.get("label") or row.get("freshness_label") or "").strip().lower().replace(" ", "_")
             image_path = Path((row.get("image_path") or "").strip())
             if split not in rows:
                 raise ValueError(f"Line {line}: split must be 'train' or 'validation'.")
@@ -41,8 +42,15 @@ def _read_manifest(manifest: Path) -> tuple[list[tuple[list[float], int]], list[
                 image_path = manifest.parent / image_path
             if not image_path.is_file():
                 raise ValueError(f"Line {line}: image file does not exist: {image_path}")
+            group = (row.get("group_id") or row.get("capture_session") or "").strip()
+            if not group:
+                raise ValueError(f"Line {line}: group_id (or capture_session) is required for leakage-safe validation.")
+            groups[split].add(group)
             vector, _ = extract_image_features(str(image_path))
             rows[split].append((vector, CLASSES.index(label)))
+    leaked_groups = groups["train"] & groups["validation"]
+    if leaked_groups:
+        raise ValueError("Capture groups must not appear in both train and validation splits.")
     if not rows["train"] or not rows["validation"]:
         raise ValueError("Manifest needs both training and validation examples.")
     for split, examples in rows.items():
@@ -137,8 +145,9 @@ def train_vision_model(
     artifact = {
         "schema_version": 1,
         "name": "freshsense-image-freshness-logistic",
-        "version": f"vision-logistic-v1-{trained_at.strftime('%Y%m%dT%H%M%SZ')}",
+        "version": f"vision-logistic-v2-{trained_at.strftime('%Y%m%dT%H%M%SZ')}",
         "model_type": "trained",
+        "feature_schema": "color-histogram-spatial-v2",
         "classes": list(CLASSES),
         "feature_names": list(FEATURE_NAMES),
         "means": means,

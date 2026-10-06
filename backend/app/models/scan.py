@@ -24,7 +24,9 @@ class FoodScan(Base):
     vision: Mapped["VisionPrediction | None"] = relationship(back_populates="scan", cascade="all, delete-orphan", uselist=False)
     ocr: Mapped["OCRResult | None"] = relationship(back_populates="scan", cascade="all, delete-orphan", uselist=False)
     assessment: Mapped["FinalAssessment | None"] = relationship(back_populates="scan", cascade="all, delete-orphan", uselist=False)
-    sensor_readings: Mapped[list["SensorReading"]] = relationship(back_populates="scan", lazy="selectin")
+    sensor_readings: Mapped[list["SensorReading"]] = relationship(
+        back_populates="scan", cascade="all, delete-orphan", lazy="selectin"
+    )
 
 
 class VisionPrediction(Base):

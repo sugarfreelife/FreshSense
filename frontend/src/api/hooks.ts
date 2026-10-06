@@ -40,11 +40,18 @@ const PassportEventSchema = z.object({
   occurred_at: z.string().nullable().optional()
 });
 
+const PassportConflictSchema = z.object({
+  key: z.enum(["vision_sensor", "vision_expiry"]),
+  title: z.string(),
+  detail: z.string()
+});
+
 const PassportSchema = z.object({
   summary: z.string(),
   explanation: z.string(),
   evidence: z.array(PassportEvidenceSchema),
   timeline: z.array(PassportEventSchema),
+  conflicts: z.array(PassportConflictSchema).optional().default([]),
   limitations: z.array(z.string())
 });
 
