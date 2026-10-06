@@ -13,6 +13,17 @@ Combines image-based freshness estimates, VOC/environmental sensing (API + ESP32
 
 ## Quick start
 ```bash
+# macOS/Linux (requires Node.js/npm and the project dependencies below)
+./start-dev.sh
+
+# Windows Command Prompt (same prerequisites)
+start-dev.cmd
+
+# Or on any platform
+node start-dev.mjs
+
+# The launchers start both services; stop them with Ctrl+C.
+
 # backend
 cd backend; cp .env.example .env  # configure DATABASE_URL for PostgreSQL
 pip install -r requirements.txt
