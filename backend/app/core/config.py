@@ -11,14 +11,17 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    DATABASE_URL: str
+    DATABASE_URL: str = "sqlite:///./freshsense-demo.db"
     JWT_SECRET: str = Field(min_length=32)
     JWT_ALGORITHM: Literal["HS256", "HS384", "HS512"] = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=60, gt=0)
     MODEL_PATH: str = "./models"
     UPLOAD_DIR: str = "./uploads"
     OCR_PROVIDER: str = "local"
-    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
+    CORS_ORIGINS: str = (
+        "http://localhost:3000,http://localhost:5173,http://127.0.0.1:5173,"
+        "http://localhost:5174,http://127.0.0.1:5174"
+    )
 
     @field_validator("DATABASE_URL")
     @classmethod
@@ -26,8 +29,8 @@ class Settings(BaseSettings):
         url = value.strip()
         if url.startswith("postgres://"):
             url = "postgresql+psycopg2://" + url[len("postgres://") :]
-        if not url.startswith(("postgresql://", "postgresql+psycopg2://")):
-            raise ValueError("DATABASE_URL must be a PostgreSQL connection URL")
+        if not url.startswith(("postgresql://", "postgresql+psycopg2://", "sqlite:///")):
+            raise ValueError("DATABASE_URL must be a PostgreSQL or SQLite connection URL")
         return url
 
     @property

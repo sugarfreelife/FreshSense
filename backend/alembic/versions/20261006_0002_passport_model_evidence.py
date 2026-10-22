@@ -21,8 +21,9 @@ def upgrade() -> None:
         "vision_predictions",
         sa.Column("visual_evidence", sa.Text(), server_default=sa.text("'{}'"), nullable=False),
     )
-    op.alter_column("vision_predictions", "confidence_kind", server_default=None)
-    op.alter_column("vision_predictions", "visual_evidence", server_default=None)
+    with op.batch_alter_table("vision_predictions") as batch_op:
+        batch_op.alter_column("confidence_kind", server_default=None)
+        batch_op.alter_column("visual_evidence", server_default=None)
 
 
 def downgrade() -> None:

@@ -16,7 +16,7 @@ from app.ml.vision.inference import predict_image
 from app.models.scan import FinalAssessment, FoodScan, OCRResult, SensorReading, TrackedItem, VisionPrediction
 from app.models.user import User
 from app.ocr.service import extract_text_from_image
-from app.schemas.scan import ScanOut, ScanPageOut
+from app.schemas.scan import ScanOut
 from app.services import assessment_service
 from app.services.passport_service import build_passport
 from app.utils.files import MAX_FILE_SIZE_BYTES, validate_extension, validate_mime, validate_size

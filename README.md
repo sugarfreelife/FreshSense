@@ -25,9 +25,9 @@ node start-dev.mjs
 # The launchers start both services; stop them with Ctrl+C.
 
 # backend
-cd backend; cp .env.example .env  # configure DATABASE_URL for PostgreSQL
+cd backend; cp .env.example .env  # local demo uses SQLite; PostgreSQL is optional
 pip install -r requirements.txt
-alembic upgrade head  # apply the schema to DATABASE_URL
+alembic upgrade head  # apply the schema to DATABASE_URL when using PostgreSQL
 python -m pytest tests -q
 uvicorn app.main:app --reload --port 8000  # docs at /docs, health at /api/v1/health
 
@@ -36,7 +36,14 @@ cd frontend; cp .env.example .env  # VITE_API_URL=http://localhost:8000/api/v1
 npm install; npm run build; npm run dev  # http://localhost:5173
 ```
 
-Configure `DATABASE_URL` and `TEST_DATABASE_URL` in `backend/.env` for separate PostgreSQL databases, and set a random `JWT_SECRET` of at least 32 characters. Create both databases first. Run `alembic upgrade head` against the application database before starting the API. Backend API tests reset all project tables in `TEST_DATABASE_URL`; the test runner refuses URLs that do not end in `_test`.
+For a local demo, the checked-in example uses `sqlite:///./freshsense-demo.db`. On first API start, the app creates its local schema and seeds two repeatable demo accounts. Both use password `FreshSenseDemo2026!`:
+
+| Email | Name |
+|---|---|
+| `demo@example.com` | FreshSense Demo |
+| `reviewer@example.com` | FreshSense Reviewer |
+
+These shared credentials are for local demos only. The ignored `backend/.env` file can keep this SQLite URL without changing any hosted database. To use PostgreSQL instead, set `DATABASE_URL`, set a random `JWT_SECRET` of at least 32 characters, create the database, and run `alembic upgrade head` before starting the API. Keep `TEST_DATABASE_URL` pointed at a separate PostgreSQL database ending in `_test`; API tests reset its project tables.
 
 If the application database already has the exact initial schema created by an older app startup, run `alembic stamp head` once instead of `alembic upgrade head`. For any other existing schema, back it up and reconcile it before applying migrations.
 

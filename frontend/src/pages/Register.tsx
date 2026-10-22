@@ -3,6 +3,27 @@ import { Link, useNavigate } from "react-router-dom";
 import { useRegister } from "../api/hooks";
 import Layout from "../components/Layout";
 import { useToast } from "../components/Toast";
+import axios from "axios";
+
+function registrationError(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    const status = error.response?.status;
+    const detail = error.response?.data?.detail;
+    if (status === 400 && typeof detail === "string" && /already registered/i.test(detail)) {
+      return "An account with this email already exists. Try signing in instead.";
+    }
+    if (!error.response) {
+      return "The server could not be reached. Start the FreshSense backend and check its database connection.";
+    }
+    if (status === 503) {
+      return "The database is unavailable. Check the backend database connection, then try again.";
+    }
+    if (status === 422) {
+      return "Some account details are invalid. Check the email and password and try again.";
+    }
+  }
+  return "We couldn’t create the account. Please try again.";
+}
 
 export default function Register() {
   const navigate = useNavigate();
@@ -25,7 +46,7 @@ export default function Register() {
           push("Account created.", "success");
           navigate("/dashboard");
         },
-        onError: () => push("Registration failed. Try a different email.", "error")
+        onError: (error) => push(registrationError(error), "error")
       }
     );
   };
@@ -73,7 +94,7 @@ export default function Register() {
         </label>
         {register.isError && (
           <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-            Registration failed. The email may already be in use.
+            {registrationError(register.error)}
           </p>
         )}
         <button

@@ -84,5 +84,5 @@ console.log("Backend:  http://127.0.0.1:8000  (API docs: /docs)");
 console.log("Frontend: http://127.0.0.1:5173");
 console.log("Press Ctrl+C to stop both services.");
 
-launch(python, ["-m", "uvicorn", "app.main:app", "--reload", "--host", "127.0.0.1", "--port", "8000"], backend, "Backend");
+launch(python, ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000"], backend, "Backend");
 launch("npm", ["run", "dev", "--", "--host", "127.0.0.1"], frontend, "Frontend", windows);
