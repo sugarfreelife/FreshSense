@@ -79,6 +79,8 @@ class FreshnessPassportOut(BaseModel):
 
 class ScanOut(BaseModel):
     id: str
+    tracked_item_id: str | None = None
+    tracked_item_label: str | None = None
     image_url: str
     food_label: str | None = None
     notes: str | None = None

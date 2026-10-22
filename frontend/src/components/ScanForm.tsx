@@ -1,18 +1,22 @@
 import { useRef, useState } from "react";
-import type { CreateScanInput } from "../api/hooks";
+import type { CreateScanInput, TrackedItem } from "../api/hooks";
 
 export interface ScanFormValue extends CreateScanInput {}
 
 export default function ScanForm({
   onSubmit,
-  isSubmitting
+  isSubmitting,
+  items
 }: {
   onSubmit: (value: ScanFormValue) => void;
   isSubmitting: boolean;
+  items: TrackedItem[];
 }) {
   const [image, setImage] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [foodType, setFoodType] = useState("");
+  const [trackedItemId, setTrackedItemId] = useState(() => new URLSearchParams(window.location.search).get("item") ?? "");
+  const [newItemName, setNewItemName] = useState("");
   const [temperature, setTemperature] = useState("");
   const [humidity, setHumidity] = useState("");
   const [voc, setVoc] = useState("");
@@ -83,6 +87,8 @@ export default function ScanForm({
     }
     onSubmit({
       image,
+      tracked_item_id: trackedItemId || undefined,
+      new_item_name: !trackedItemId ? newItemName.trim() || undefined : undefined,
       food_type: foodType.trim() || undefined,
       temperature_c: t,
       humidity_pct: h,
@@ -177,6 +183,39 @@ export default function ScanForm({
             className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
           />
         </label>
+        <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+          <label className="block text-sm">
+            <span className="font-medium text-emerald-950">Build a Freshness Passport</span>
+            <span className="mt-1 block text-xs text-emerald-900">
+              Track the same item across scans to compare its evidence over time.
+            </span>
+            <select
+              value={trackedItemId}
+              onChange={(e) => setTrackedItemId(e.target.value)}
+              className="mt-2 w-full rounded-lg border border-emerald-300 bg-white px-3 py-2"
+            >
+              <option value="">Start a new passport or leave untracked</option>
+              {items.map((item) => (
+                <option key={item.id} value={item.id}>
+                  Continue: {item.label} ({item.scan_count} scan{item.scan_count === 1 ? "" : "s"})
+                </option>
+              ))}
+            </select>
+          </label>
+          {!trackedItemId && (
+            <label className="mt-2 block text-sm">
+              <span className="text-emerald-950">Passport name <span className="font-normal">(optional)</span></span>
+              <input
+                type="text"
+                maxLength={100}
+                value={newItemName}
+                onChange={(e) => setNewItemName(e.target.value)}
+                placeholder="e.g. Milk carton opened Monday"
+                className="mt-1 w-full rounded-lg border border-emerald-300 bg-white px-3 py-2"
+              />
+            </label>
+          )}
+        </div>
         <div className="mt-3 grid grid-cols-3 gap-2">
           <label className="block text-sm">
             <span className="text-slate-600">Temp °C</span>

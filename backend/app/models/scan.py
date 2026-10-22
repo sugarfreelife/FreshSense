@@ -16,6 +16,9 @@ class FoodScan(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    tracked_item_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("tracked_items.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     image_path: Mapped[str] = mapped_column(String(1024), nullable=False)
     food_label: Mapped[str | None] = mapped_column(String(255), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -27,6 +30,18 @@ class FoodScan(Base):
     sensor_readings: Mapped[list["SensorReading"]] = relationship(
         back_populates="scan", cascade="all, delete-orphan", lazy="selectin"
     )
+    tracked_item: Mapped["TrackedItem | None"] = relationship(back_populates="scans", lazy="joined")
+
+
+class TrackedItem(Base):
+    __tablename__ = "tracked_items"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    label: Mapped[str] = mapped_column(String(100), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    scans: Mapped[list[FoodScan]] = relationship(back_populates="tracked_item")
 
 
 class VisionPrediction(Base):

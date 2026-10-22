@@ -16,7 +16,11 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
     existing = db.query(User).filter(User.email == payload.email).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
-    user = User(email=payload.email, hashed_password=get_password_hash(payload.password))
+    user = User(
+        email=payload.email,
+        name=payload.name.strip() if payload.name and payload.name.strip() else None,
+        hashed_password=get_password_hash(payload.password),
+    )
     db.add(user)
     try:
         db.commit()

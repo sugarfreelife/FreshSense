@@ -4,18 +4,19 @@ import uuid
 from datetime import date
 from pathlib import Path
 from typing import Annotated
-from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Response, UploadFile, status
+from fastapi.responses import FileResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.deps import get_current_user, get_db
 from app.ml.vision.inference import predict_image
-from app.models.scan import FinalAssessment, FoodScan, OCRResult, SensorReading, VisionPrediction
+from app.models.scan import FinalAssessment, FoodScan, OCRResult, SensorReading, TrackedItem, VisionPrediction
 from app.models.user import User
 from app.ocr.service import extract_text_from_image
-from app.schemas.scan import ScanOut
+from app.schemas.scan import ScanOut, ScanPageOut
 from app.services import assessment_service
 from app.services.passport_service import build_passport
 from app.utils.files import MAX_FILE_SIZE_BYTES, validate_extension, validate_mime, validate_size
@@ -74,7 +75,9 @@ def _scan_to_out(scan: FoodScan) -> dict:
     )
     return {
         "id": scan.id,
-        "image_url": f"/uploads/{quote(Path(scan.image_path).name)}",
+        "image_url": f"/api/v1/scans/{scan.id}/image",
+        "tracked_item_id": scan.tracked_item_id,
+        "tracked_item_label": scan.tracked_item.label if scan.tracked_item else None,
         "food_label": scan.food_label,
         "notes": scan.notes,
         "created_at": scan.created_at,
@@ -96,7 +99,21 @@ async def create_scan(
     humidity_pct: Annotated[float | None, Form(ge=0, le=100)] = None,
     voc_index: Annotated[float | None, Form(ge=0, le=5000)] = None,
     notes: Annotated[str | None, Form(max_length=2000)] = None,
+    tracked_item_id: Annotated[str | None, Form()] = None,
+    new_item_name: Annotated[str | None, Form(max_length=100)] = None,
 ):
+    if tracked_item_id and new_item_name and new_item_name.strip():
+        raise HTTPException(status_code=400, detail="Choose an existing item or name a new one, not both.")
+    tracked_item = None
+    if tracked_item_id:
+        tracked_item = (
+            db.query(TrackedItem)
+            .filter(TrackedItem.id == tracked_item_id, TrackedItem.user_id == current.id)
+            .first()
+        )
+        if tracked_item is None:
+            raise HTTPException(status_code=404, detail="Tracked item not found")
+
     filename = file.filename or "upload.jpg"
     if not validate_extension(filename):
         raise HTTPException(status_code=400, detail="Unsupported file extension. Use jpg, jpeg, png, or webp.")
@@ -133,8 +150,14 @@ async def create_scan(
             vision=vision, sensor=sensor, ocr=ocr, expiry_date=expiry_date
         )
 
+        if not tracked_item and new_item_name and new_item_name.strip():
+            tracked_item = TrackedItem(user_id=current.id, label=new_item_name.strip())
+            db.add(tracked_item)
+            db.flush()
+
         scan = FoodScan(
             user_id=current.id,
+            tracked_item_id=tracked_item.id if tracked_item else None,
             image_path=dest_path,
             food_label=food_type.strip() if food_type and food_type.strip() else None,
             notes=notes.strip() if notes and notes.strip() else None,
@@ -198,9 +221,63 @@ async def create_scan(
 
 
 @router.get("", response_model=list[ScanOut])
-def list_scans(db: Session = Depends(get_db), current: User = Depends(get_current_user)):
-    scans = db.query(FoodScan).filter(FoodScan.user_id == current.id).order_by(FoodScan.created_at.desc()).all()
+def list_scans(
+    response: Response,
+    db: Session = Depends(get_db),
+    current: User = Depends(get_current_user),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+):
+    query = db.query(FoodScan).filter(FoodScan.user_id == current.id)
+    total = query.count()
+    scans = query.order_by(FoodScan.created_at.desc()).offset(offset).limit(limit).all()
+    response.headers["X-Total-Count"] = str(total)
     return [_scan_to_out(s) for s in scans]
+
+
+@router.get("/items", tags=["tracked items"])
+def list_tracked_items(db: Session = Depends(get_db), current: User = Depends(get_current_user)):
+    rows = (
+        db.query(TrackedItem, func.count(FoodScan.id), func.max(FoodScan.created_at))
+        .join(FoodScan, FoodScan.tracked_item_id == TrackedItem.id)
+        .filter(TrackedItem.user_id == current.id, FoodScan.user_id == current.id)
+        .group_by(TrackedItem.id)
+        .order_by(func.max(FoodScan.created_at).desc())
+        .all()
+    )
+    return [
+        {"id": item.id, "label": item.label, "scan_count": count, "last_scanned": last_scanned}
+        for item, count, last_scanned in rows
+    ]
+
+
+@router.get("/items/{item_id}", tags=["tracked items"])
+def get_tracked_item(item_id: str, db: Session = Depends(get_db), current: User = Depends(get_current_user)):
+    item = db.query(TrackedItem).filter(TrackedItem.id == item_id, TrackedItem.user_id == current.id).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="Tracked item not found")
+    scans = (
+        db.query(FoodScan)
+        .filter(FoodScan.tracked_item_id == item.id, FoodScan.user_id == current.id)
+        .order_by(FoodScan.created_at.asc())
+        .all()
+    )
+    return {"id": item.id, "label": item.label, "scans": [_scan_to_out(scan) for scan in scans]}
+
+
+@router.get("/{scan_id}/image", include_in_schema=False)
+def get_scan_image(scan_id: str, db: Session = Depends(get_db), current: User = Depends(get_current_user)):
+    scan = db.query(FoodScan).filter(FoodScan.id == scan_id, FoodScan.user_id == current.id).first()
+    if scan is None:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    upload_root = Path(settings.UPLOAD_DIR).resolve()
+    image_path = Path(scan.image_path).resolve()
+    if not image_path.is_relative_to(upload_root) or not image_path.is_file():
+        raise HTTPException(status_code=404, detail="Image not found")
+    return FileResponse(
+        image_path,
+        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
+    )
 
 
 @router.get("/{scan_id}", response_model=ScanOut)

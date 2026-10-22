@@ -2,7 +2,7 @@
 
 **Product name:** FreshSense AI · Phase-1 60% milestone (functional foundation, honest prototype labels).
 
-Combines image-based freshness estimates, VOC/environmental sensing (API + ESP32 abstraction), and OCR expiry extraction + deterministic fusion/decision layer. Scan results include a Freshness Passport that shows which evidence contributed, what was missing, and how the recommendation was produced.
+Combines image-based freshness estimates, VOC/environmental sensing (API + ESP32 abstraction), OCR expiry extraction, and deterministic decision rules. A Freshness Passport records the evidence behind each scan; users can link repeat scans to the same named food item and inspect a chronological record of assessments and storage context.
 
 > Assessment is informational, not certified food-safety judgment. Prototype vision output is labeled `prototype`, unfinished fusion/shelf-life as `not_implemented`/Phase 2.
 
@@ -41,7 +41,9 @@ Configure `DATABASE_URL` and `TEST_DATABASE_URL` in `backend/.env` for separate 
 If the application database already has the exact initial schema created by an older app startup, run `alembic stamp head` once instead of `alembic upgrade head`. For any other existing schema, back it up and reconcile it before applying migrations.
 
 ## Flow
-PWA → register/login → dashboard → scan (camera/upload + optional sensor values) → vision/OCR/fusion/decision → result report → history.
+PWA → register/login → scan (camera/upload + optional context) → vision/OCR/decision → Freshness Passport → optionally link scans to a named item → review its longitudinal evidence timeline.
+
+Scans are paginated (20 per request by default). Uploaded photos are returned through an authenticated, non-cacheable endpoint rather than public static hosting. Apply the new Alembic migration before starting an existing database.
 
 ## AI status
 | Component | Status |

@@ -1,4 +1,5 @@
 import {
+  useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
@@ -57,6 +58,8 @@ const PassportSchema = z.object({
 
 const NestedScanSchema = z.object({
   id: z.union([z.string(), z.number()]),
+  tracked_item_id: z.string().nullable().optional(),
+  tracked_item_label: z.string().nullable().optional(),
   image_url: z.string().optional().nullable(),
   food_label: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
@@ -97,6 +100,8 @@ const NestedScanSchema = z.object({
 
 export const ScanSchema = NestedScanSchema.transform((scan) => ({
   id: scan.id,
+  tracked_item_id: scan.tracked_item_id ?? null,
+  tracked_item_label: scan.tracked_item_label ?? null,
   image_url: scan.image_url
     ? new URL(scan.image_url, apiClient.defaults.baseURL).toString()
     : null,
@@ -123,6 +128,26 @@ export const ScanSchema = NestedScanSchema.transform((scan) => ({
 export type Scan = z.infer<typeof ScanSchema>;
 
 const ScanListSchema = z.array(ScanSchema);
+const ScanPageSchema = z.object({
+  items: ScanListSchema,
+  total: z.number(),
+  limit: z.number(),
+  offset: z.number()
+});
+
+export const TrackedItemSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  scan_count: z.number(),
+  last_scanned: z.string()
+});
+export type TrackedItem = z.infer<typeof TrackedItemSchema>;
+
+const TrackedItemDetailSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  scans: ScanListSchema
+});
 
 /* ---------- Queries ---------- */
 
@@ -152,16 +177,45 @@ export function useMe(): UseQueryResult<User | null, Error> {
   });
 }
 
-export function useScans(): UseQueryResult<Scan[], Error> {
-  return useQuery({
+export function useScans() {
+  return useInfiniteQuery({
     queryKey: ["scans"],
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => {
+      const res = await apiClient.get("/scans", { params: { limit: 20, offset: pageParam } });
+      const items = ScanListSchema.parse(res.data);
+      return ScanPageSchema.parse({
+        items,
+        total: Number(res.headers["x-total-count"] ?? items.length + pageParam),
+        limit: 20,
+        offset: pageParam
+      });
+    },
+    getNextPageParam: (lastPage) =>
+      lastPage.offset + lastPage.items.length < lastPage.total
+        ? lastPage.offset + lastPage.limit
+        : undefined
+  });
+}
+
+export function useTrackedItems(): UseQueryResult<TrackedItem[], Error> {
+  return useQuery({
+    queryKey: ["tracked-items"],
     queryFn: async () => {
-      const res = await apiClient.get("/scans");
-      const data = Array.isArray(res.data)
-        ? res.data
-        : (res.data?.items ?? res.data?.scans ?? []);
-      return ScanListSchema.parse(data);
+      const res = await apiClient.get("/scans/items");
+      return z.array(TrackedItemSchema).parse(res.data);
     }
+  });
+}
+
+export function useTrackedItem(id: string | undefined) {
+  return useQuery({
+    queryKey: ["tracked-item", id],
+    queryFn: async () => {
+      const res = await apiClient.get(`/scans/items/${id}`);
+      return TrackedItemDetailSchema.parse(res.data);
+    },
+    enabled: Boolean(id)
   });
 }
 
@@ -221,6 +275,8 @@ export function useRegister(): UseMutationResult<AuthResponse, Error, RegisterIn
 
 export interface CreateScanInput {
   image: File;
+  tracked_item_id?: string;
+  new_item_name?: string;
   food_type?: string;
   temperature_c?: number;
   humidity_pct?: number;
@@ -234,6 +290,8 @@ export function useCreateScan(): UseMutationResult<Scan, Error, CreateScanInput>
     mutationFn: async (input: CreateScanInput) => {
       const form = new FormData();
       form.append("file", input.image, input.image.name || "capture.jpg");
+      if (input.tracked_item_id) form.append("tracked_item_id", input.tracked_item_id);
+      if (input.new_item_name) form.append("new_item_name", input.new_item_name);
       if (input.food_type) form.append("food_type", input.food_type);
       if (input.temperature_c !== undefined)
         form.append("temperature_c", String(input.temperature_c));
@@ -247,6 +305,8 @@ export function useCreateScan(): UseMutationResult<Scan, Error, CreateScanInput>
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["scans"] });
+      void qc.invalidateQueries({ queryKey: ["tracked-items"] });
+      void qc.invalidateQueries({ queryKey: ["tracked-item"] });
     }
   });
 }

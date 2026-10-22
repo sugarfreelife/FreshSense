@@ -23,11 +23,11 @@ function needsAttention(label: string): boolean {
 export default function Dashboard() {
   const scansQuery = useScans();
 
-  const scans = scansQuery.data ?? [];
-  const total = scans.length;
-  const attention = scans.filter((s) => needsAttention(freshnessLabel(s))).length;
-  const fresh = total - attention;
+  const scans = scansQuery.data?.pages.flatMap((page) => page.items) ?? [];
+  const total = scansQuery.data?.pages[0]?.total ?? 0;
   const recent = scans.slice(0, 5);
+  const attention = recent.filter((s) => needsAttention(freshnessLabel(s))).length;
+  const fresh = recent.length - attention;
 
   return (
     <Layout>
@@ -58,11 +58,11 @@ export default function Dashboard() {
             </div>
             <div className="rounded-xl border border-green-200 bg-green-50 p-3">
               <p className="text-2xl font-bold text-green-700">{fresh}</p>
-              <p className="text-xs text-slate-500">Fresh</p>
+              <p className="text-xs text-slate-500">Fresh (recent)</p>
             </div>
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
               <p className="text-2xl font-bold text-amber-700">{attention}</p>
-              <p className="text-xs text-slate-500">Needs attention</p>
+              <p className="text-xs text-slate-500">Review (recent)</p>
             </div>
           </div>
 
@@ -86,7 +86,7 @@ export default function Dashboard() {
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-sm font-semibold text-slate-800">
-                        {s.food_type ?? "Food scan"}
+                        {s.tracked_item_label ?? s.food_type ?? "Food scan"}
                       </span>
                       <span className="text-xs text-slate-500">
                         {s.created_at ? new Date(s.created_at).toLocaleDateString() : ""}

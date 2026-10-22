@@ -1,4 +1,6 @@
 import type { Scan } from "../api/hooks";
+import { Link } from "react-router-dom";
+import AuthenticatedImage from "./AuthenticatedImage";
 
 function freshnessTone(freshness?: string | null): string {
   const v = (freshness ?? "").toLowerCase();
@@ -74,12 +76,15 @@ export default function ResultCard({ scan }: { scan: { id: Scan["id"] } & Partia
             Food: <strong className="text-slate-800">{scan.food_type}</strong>
           </p>
         )}
+        {scan.tracked_item_id && scan.tracked_item_label && (
+          <Link to={`/items/${scan.tracked_item_id}`} className="mt-2 inline-block text-sm font-semibold text-green-700 underline">
+            View {scan.tracked_item_label} over time
+          </Link>
+        )}
         {scan.image_url && (
-          <img
+          <AuthenticatedImage
             src={scan.image_url}
             alt={scan.food_type ? `Photo of ${scan.food_type}` : "Scanned food photo"}
-            className="mt-3 max-h-64 w-full rounded-xl object-cover"
-            loading="lazy"
           />
         )}
       </section>

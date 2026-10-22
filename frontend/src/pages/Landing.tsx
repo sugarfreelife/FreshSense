@@ -26,16 +26,19 @@ export default function Landing() {
               the model assesses appearance and spoilage cues.
             </li>
             <li className="rounded-xl border border-slate-200 bg-white p-3">
-              <strong className="text-slate-800">2. Sensors</strong> — optional
-              temperature, humidity and VOC readings refine the verdict.
+              <strong className="text-slate-800">2. Storage context</strong> — optional
+              temperature, humidity and VOC readings are recorded. VOC currently adds a fixed-threshold warning; temperature and humidity are context only.
             </li>
             <li className="rounded-xl border border-slate-200 bg-white p-3">
-              <strong className="text-slate-800">3. OCR + fusion</strong> — printed
-              expiry dates are extracted and fused into a final recommendation
-              with shelf-life estimate.
+              <strong className="text-slate-800">3. Passport over time</strong> — attach
+              repeat scans to the same food item and review how its evidence and assessment changed.
             </li>
           </ol>
         </section>
+
+        <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-left text-sm text-emerald-950">
+          Each Passport preserves the scan timeline, supporting evidence, missing inputs and disagreements between signals. Repeated scans form a traceable record, not a validated shelf-life prediction.
+        </p>
 
         <div className="space-y-2">
           <Link

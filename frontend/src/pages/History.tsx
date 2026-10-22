@@ -6,6 +6,8 @@ import EmptyState from "../components/EmptyState";
 
 export default function History() {
   const scansQuery = useScans();
+  const scans = scansQuery.data?.pages.flatMap((page) => page.items) ?? [];
+  const total = scansQuery.data?.pages[0]?.total ?? 0;
 
   return (
     <Layout>
@@ -26,7 +28,7 @@ export default function History() {
           <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
             Could not load history. Check your connection.
           </p>
-        ) : !scansQuery.data || scansQuery.data.length === 0 ? (
+        ) : total === 0 ? (
           <EmptyState
             title="No history yet"
             message="Your analyzed scans will appear here."
@@ -35,7 +37,7 @@ export default function History() {
           />
         ) : (
           <ul className="space-y-2">
-            {scansQuery.data.map((s) => {
+            {scans.map((s) => {
               const label = s.freshness_label ?? s.freshness ?? "Unknown";
               const conf =
                 s.confidence === undefined || s.confidence === null
@@ -49,7 +51,7 @@ export default function History() {
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-sm font-semibold text-slate-800">
-                        {s.food_type ?? "Food scan"}
+                        {s.tracked_item_label ?? s.food_type ?? "Food scan"}
                       </span>
                       <span className="text-xs text-slate-500">
                         {s.created_at ? new Date(s.created_at).toLocaleString() : ""}
@@ -60,10 +62,25 @@ export default function History() {
                       {s.expiry_date ? ` · exp ${s.expiry_date}` : ""}
                     </p>
                   </Link>
+                  {s.tracked_item_id && (
+                    <Link to={`/items/${s.tracked_item_id}`} className="mt-1 inline-block px-3 text-xs font-medium text-green-700 underline">
+                      Open longitudinal passport →
+                    </Link>
+                  )}
                 </li>
               );
             })}
           </ul>
+        )}
+        {scansQuery.hasNextPage && (
+          <button
+            type="button"
+            onClick={() => void scansQuery.fetchNextPage()}
+            disabled={scansQuery.isFetchingNextPage}
+            className="mt-4 w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-60"
+          >
+            {scansQuery.isFetchingNextPage ? "Loading…" : `Load more (${scans.length} of ${total})`}
+          </button>
         )}
       </div>
     </Layout>

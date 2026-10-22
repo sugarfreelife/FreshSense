@@ -44,11 +44,13 @@ export default defineConfig({
         globPatterns: ["**/*.{js,css,html,svg,png,ico}"],
         runtimeCaching: [
           {
-            urlPattern: ({ request }) =>
-              request.destination === "document" ||
-              request.destination === "script" ||
-              request.destination === "style" ||
-              request.destination === "image",
+            urlPattern: ({ url, request }) =>
+              !url.pathname.startsWith("/api/") && (
+                request.destination === "document" ||
+                request.destination === "script" ||
+                request.destination === "style" ||
+                request.destination === "image"
+              ),
             handler: "StaleWhileRevalidate",
             options: {
               cacheName: "freshsense-app-shell",

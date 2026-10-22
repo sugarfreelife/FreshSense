@@ -5,6 +5,7 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 
 class UserCreate(BaseModel):
     email: EmailStr
+    name: str | None = Field(default=None, max_length=100)
     # min 6 to match frontend; max 72 = bcrypt limit (longer input would 500 in passlib)
     password: str = Field(min_length=6, max_length=72)
 
@@ -41,6 +42,7 @@ class UserLogin(BaseModel):
 class UserOut(BaseModel):
     id: str
     email: EmailStr
+    name: str | None = None
 
     model_config = {"from_attributes": True}
 
