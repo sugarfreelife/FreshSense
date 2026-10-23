@@ -28,7 +28,7 @@ export function isOnline(): boolean {
 
 const baseURL =
   (import.meta.env.VITE_API_URL as string | undefined) ||
-  "http://localhost:8000/api/v1";
+  "http://127.0.0.1:8000/api/v1";
 
 export const apiClient = axios.create({
   baseURL,

@@ -1,7 +1,7 @@
 import json
 import os
 import uuid
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -15,6 +15,7 @@ from app.core.deps import get_current_user, get_db
 from app.ml.vision.inference import predict_image
 from app.models.scan import FinalAssessment, FoodScan, OCRResult, SensorReading, TrackedItem, VisionPrediction
 from app.models.user import User
+from app.ocr.product_parser import recognize_product
 from app.ocr.service import extract_text_from_image
 from app.schemas.scan import ScanOut
 from app.services import assessment_service
@@ -22,6 +23,19 @@ from app.services.passport_service import build_passport
 from app.utils.files import MAX_FILE_SIZE_BYTES, validate_extension, validate_mime, validate_size
 
 router = APIRouter(prefix="/scans", tags=["scans"])
+_BACKEND_DIR = Path(__file__).resolve().parents[4]
+
+
+def _upload_root() -> Path:
+    root = Path(settings.UPLOAD_DIR)
+    return root.resolve() if root.is_absolute() else (_BACKEND_DIR / root).resolve()
+
+
+def _resolve_scan_image(stored_path: str) -> Path:
+    path = Path(stored_path)
+    if not path.is_absolute():
+        path = _BACKEND_DIR / path
+    return path.resolve()
 
 
 def _scan_to_out(scan: FoodScan) -> dict:
@@ -43,8 +57,13 @@ def _scan_to_out(scan: FoodScan) -> dict:
             "raw_text": scan.ocr.raw_text,
             "expiry_date": scan.ocr.expiry_date,
             "date_detected": scan.ocr.date_detected,
+            "provider": scan.ocr.provider,
+            "confidence": scan.ocr.confidence,
+            "expiry_label": scan.ocr.expiry_label,
+              "expiry_text": scan.ocr.expiry_text,
             "created_at": scan.ocr.created_at,
         }
+    product = recognize_product((ocr or {}).get("raw_text", ""), user_label=scan.food_label)
     sensor_row = max(scan.sensor_readings, key=lambda reading: reading.created_at, default=None)
     sensor = None
     if sensor_row:
@@ -52,6 +71,7 @@ def _scan_to_out(scan: FoodScan) -> dict:
             "gas_value": sensor_row.gas_value,
             "temperature": sensor_row.temperature,
             "humidity": sensor_row.humidity,
+            "source": sensor_row.source,
             "created_at": sensor_row.created_at,
         }
     assessment = None
@@ -72,6 +92,7 @@ def _scan_to_out(scan: FoodScan) -> dict:
         ocr=ocr,
         sensor=sensor,
         assessment=assessment,
+        product=product,
     )
     return {
         "id": scan.id,
@@ -79,6 +100,7 @@ def _scan_to_out(scan: FoodScan) -> dict:
         "tracked_item_id": scan.tracked_item_id,
         "tracked_item_label": scan.tracked_item.label if scan.tracked_item else None,
         "food_label": scan.food_label,
+        "product": product,
         "notes": scan.notes,
         "created_at": scan.created_at,
         "vision": vision,
@@ -98,6 +120,7 @@ async def create_scan(
     temperature_c: Annotated[float | None, Form(ge=-40, le=85)] = None,
     humidity_pct: Annotated[float | None, Form(ge=0, le=100)] = None,
     voc_index: Annotated[float | None, Form(ge=0, le=5000)] = None,
+    sensor_source: Annotated[str, Form(pattern="^(user_entered|demo_estimate|mixed)$")] = "user_entered",
     notes: Annotated[str | None, Form(max_length=2000)] = None,
     tracked_item_id: Annotated[str | None, Form()] = None,
     new_item_name: Annotated[str | None, Form(max_length=100)] = None,
@@ -123,11 +146,11 @@ async def create_scan(
     if not validate_size(len(contents)):
         raise HTTPException(status_code=400, detail="File too large. Max 10MB.")
 
-    upload_dir = settings.UPLOAD_DIR
-    os.makedirs(upload_dir, exist_ok=True)
+    upload_dir = _upload_root()
+    upload_dir.mkdir(parents=True, exist_ok=True)
     ext = os.path.splitext(filename.lower())[1] or ".jpg"
     safe_name = f"{uuid.uuid4().hex}{ext}"
-    dest_path = os.path.join(upload_dir, safe_name)
+    dest_path = str(upload_dir / safe_name)
     try:
         with open(dest_path, "xb") as f:
             f.write(contents)
@@ -139,6 +162,9 @@ async def create_scan(
 
         vision = predict_image(dest_path)
         ocr = extract_text_from_image(dest_path)
+        product = recognize_product(ocr.get("raw_text", ""), user_label=food_type)
+        if product["category"] and product["source"] == "package_text":
+            vision["food_type"] = product["category"]
         expiry_date = date.fromisoformat(ocr["expiry_date"]) if ocr.get("expiry_date") else None
         sensor_values = {
             "gas_value": voc_index,
@@ -147,7 +173,10 @@ async def create_scan(
         }
         sensor = sensor_values if any(value is not None for value in sensor_values.values()) else None
         decision = assessment_service.assess_scan(
-            vision=vision, sensor=sensor, ocr=ocr, expiry_date=expiry_date
+            vision=vision,
+            sensor=sensor if sensor_source == "user_entered" else None,
+            ocr=ocr,
+            expiry_date=expiry_date,
         )
 
         if not tracked_item and new_item_name and new_item_name.strip():
@@ -182,6 +211,10 @@ async def create_scan(
                 raw_text=ocr.get("raw_text", ""),
                 expiry_date=expiry_date,
                 date_detected=ocr.get("date_detected", False),
+                provider=ocr.get("provider", "unknown"),
+                confidence=ocr.get("confidence"),
+                expiry_label=ocr.get("expiry_label"),
+                  expiry_text=ocr.get("expiry_text"),
             )
         )
         if sensor is not None:
@@ -192,6 +225,7 @@ async def create_scan(
                     gas_value=sensor["gas_value"],
                     temperature=sensor["temperature"],
                     humidity=sensor["humidity"],
+                    source=sensor_source,
                 )
             )
         db.add(
@@ -218,6 +252,80 @@ async def create_scan(
         except OSError:
             pass
         raise
+
+
+@router.post("/{scan_id}/reanalyze", response_model=ScanOut)
+def reanalyze_scan(
+    scan_id: str,
+    db: Session = Depends(get_db),
+    current: User = Depends(get_current_user),
+):
+    """Re-read an existing scan photo so improved OCR can update its Passport."""
+    scan = db.query(FoodScan).filter(FoodScan.id == scan_id, FoodScan.user_id == current.id).first()
+    if scan is None:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    image_path = _resolve_scan_image(scan.image_path)
+    if not image_path.is_relative_to(_upload_root()) or not image_path.is_file():
+        raise HTTPException(status_code=404, detail="The saved scan photo is no longer available")
+
+    ocr = extract_text_from_image(str(image_path))
+    recognized = recognize_product(ocr.get("raw_text", ""), user_label=scan.food_label)
+    if scan.ocr is None:
+        scan.ocr = OCRResult(scan_id=scan.id)
+    scan.ocr.raw_text = ocr.get("raw_text", "")
+    scan.ocr.expiry_date = date.fromisoformat(ocr["expiry_date"]) if ocr.get("expiry_date") else None
+    scan.ocr.date_detected = bool(ocr.get("date_detected"))
+    scan.ocr.provider = ocr.get("provider", "unknown")
+    scan.ocr.confidence = ocr.get("confidence")
+    scan.ocr.expiry_label = ocr.get("expiry_label")
+    scan.ocr.expiry_text = ocr.get("expiry_text")
+    scan.ocr.created_at = datetime.utcnow()
+
+    vision = None
+    if scan.vision:
+        vision = {
+            "food_type": scan.vision.food_type,
+            "freshness": scan.vision.freshness,
+            "confidence": scan.vision.confidence,
+            "model_type": scan.vision.model_type,
+            "model_version": scan.vision.model_version,
+            "confidence_kind": scan.vision.confidence_kind,
+            "visual_evidence": json.loads(scan.vision.visual_evidence or "{}"),
+        }
+        if recognized.get("source") == "package_text" and recognized.get("category"):
+            scan.vision.food_type = recognized["category"]
+            vision["food_type"] = recognized["category"]
+
+    sensor_row = max(scan.sensor_readings, key=lambda reading: reading.created_at, default=None)
+    sensor = None
+    if sensor_row:
+        sensor = {
+            "gas_value": sensor_row.gas_value,
+            "temperature": sensor_row.temperature,
+            "humidity": sensor_row.humidity,
+            "source": sensor_row.source,
+        }
+    decision = assessment_service.assess_scan(
+        vision=vision,
+        sensor=sensor if (sensor_row and sensor_row.source == "user_entered") else None,
+        ocr=ocr,
+        expiry_date=scan.ocr.expiry_date,
+    )
+    if scan.assessment is None:
+        scan.assessment = FinalAssessment(scan_id=scan.id)
+    scan.assessment.freshness = decision["freshness"]
+    scan.assessment.confidence = decision["confidence"]
+    scan.assessment.recommendation = decision["recommendation"]
+    scan.assessment.warnings = json.dumps(decision["warnings"])
+    scan.assessment.modalities_used = json.dumps(decision["modalities_used"])
+    scan.assessment.expiry_status = decision["expiry_status"]
+    scan.assessment.days_remaining = decision["days_remaining"]
+    scan.assessment.created_at = datetime.utcnow()
+
+    db.flush()
+    response = _scan_to_out(scan)
+    db.commit()
+    return response
 
 
 @router.get("", response_model=list[ScanOut])
@@ -270,8 +378,8 @@ def get_scan_image(scan_id: str, db: Session = Depends(get_db), current: User = 
     scan = db.query(FoodScan).filter(FoodScan.id == scan_id, FoodScan.user_id == current.id).first()
     if scan is None:
         raise HTTPException(status_code=404, detail="Scan not found")
-    upload_root = Path(settings.UPLOAD_DIR).resolve()
-    image_path = Path(scan.image_path).resolve()
+    upload_root = _upload_root()
+    image_path = _resolve_scan_image(scan.image_path)
     if not image_path.is_relative_to(upload_root) or not image_path.is_file():
         raise HTTPException(status_code=404, detail="Image not found")
     return FileResponse(

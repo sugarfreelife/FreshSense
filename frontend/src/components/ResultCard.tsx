@@ -47,7 +47,30 @@ function evidenceTone(state: string): string {
   return "border-green-200 bg-green-50";
 }
 
-export default function ResultCard({ scan }: { scan: { id: Scan["id"] } & Partial<Omit<Scan, "id">> }) {
+function ocrLabel(provider?: string): string {
+  switch (provider) {
+    case "tesseract": return "Read with Tesseract";
+    case "easyocr": return "Read with EasyOCR";
+    case "manual": return "Text entered manually";
+    case "legacy": return "Older scan · needs OCR refresh";
+    case "unavailable": return "OCR engine unavailable";
+    case "tesseract_error":
+    case "easyocr_error": return "Could not read this image";
+    default: return "Waiting for package text reading";
+  }
+}
+
+export default function ResultCard({
+  scan,
+  onReanalyze,
+  isReanalyzing = false,
+  reanalyzeError
+}: {
+  scan: { id: Scan["id"] } & Partial<Omit<Scan, "id">>;
+  onReanalyze?: () => void;
+  isReanalyzing?: boolean;
+  reanalyzeError?: string | null;
+}) {
   const label = scan.freshness_label ?? scan.freshness ?? "Unknown";
   const sources = scan.sources ?? [];
   const warnings = scan.warnings ?? [];
@@ -56,6 +79,9 @@ export default function ResultCard({ scan }: { scan: { id: Scan["id"] } & Partia
     : scan.confidence_kind === "heuristic_score"
       ? "Prototype score"
       : "Uncalibrated model score";
+  const product = scan.product;
+  const productCategory = product?.category ?? null;
+  const productFromImage = product?.source === "package_text";
 
   return (
     <article aria-label="Scan result" className="space-y-4">
@@ -71,11 +97,6 @@ export default function ResultCard({ scan }: { scan: { id: Scan["id"] } & Partia
             <strong>{formatPct(scan.model_score ?? scan.confidence)}</strong>
           </span>
         </div>
-        {scan.food_type && (
-          <p className="mt-2 text-sm text-slate-600">
-            Food: <strong className="text-slate-800">{scan.food_type}</strong>
-          </p>
-        )}
         {scan.tracked_item_id && scan.tracked_item_label && (
           <Link to={`/items/${scan.tracked_item_id}`} className="mt-2 inline-block text-sm font-semibold text-green-700 underline">
             View {scan.tracked_item_label} over time
@@ -89,15 +110,94 @@ export default function ResultCard({ scan }: { scan: { id: Scan["id"] } & Partia
         )}
       </section>
 
+      <section aria-label="Product recognition" className="overflow-hidden rounded-2xl border border-emerald-200 bg-white">
+        <div className="border-b border-emerald-100 bg-emerald-50/70 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-800">Package readout</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <h2 className="text-lg font-bold text-slate-900">{productCategory ?? "Product not identified"}</h2>
+            {productFromImage && (
+              <span className="rounded-full border border-emerald-200 bg-white px-2.5 py-1 text-xs font-medium text-emerald-800">
+                matched from package text
+              </span>
+            )}
+            {product?.source === "user_label" && (
+              <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600">
+                label supplied by you
+              </span>
+            )}
+          </div>
+          {product?.product_name && product.product_name !== productCategory && (
+            <p className="mt-1 text-sm text-slate-700">{product.product_name}</p>
+          )}
+        </div>
+        <div className="space-y-3 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+            <span className="text-slate-600">{ocrLabel(scan.ocr_provider)}</span>
+            {productFromImage && product?.confidence != null && (
+              <span className="font-medium text-slate-700">Text match strength {formatPct(product.confidence)}</span>
+            )}
+            {!productFromImage && scan.ocr_confidence != null && (
+              <span className="font-medium text-slate-700">Text-read score {formatPct(scan.ocr_confidence)}</span>
+            )}
+          </div>
+          {product?.evidence && product.evidence.length > 0 && (
+            <div className="flex flex-wrap gap-2" aria-label="Recognition evidence">
+              {product.evidence.map((term) => (
+                <span key={term} className="rounded-md bg-slate-100 px-2 py-1 font-mono text-xs text-slate-700">{term}</span>
+              ))}
+            </div>
+          )}
+          {!productCategory && (
+            <p className="text-sm text-slate-600">
+              A clear view of the product name can identify categories such as dairy, bread, canned fish, and drinks.
+            </p>
+          )}
+          {["unavailable", "legacy", "unknown"].includes(scan.ocr_provider ?? "unknown") && (
+            <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              This scan has no package text yet. Automatic reading needs an OCR engine such as Tesseract installed on the backend computer; then choose “Read this label again.”
+            </p>
+          )}
+          {onReanalyze && (
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={onReanalyze}
+                disabled={isReanalyzing}
+                className="rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-800 transition-colors hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
+              >
+                {isReanalyzing ? "Reading label…" : "Read this label again"}
+              </button>
+              {reanalyzeError && <span role="alert" className="text-sm text-red-700">{reanalyzeError}</span>}
+            </div>
+          )}
+          {scan.ocr_text && (
+            <details className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <summary className="cursor-pointer text-sm font-medium text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600">
+                View text read from the package
+              </summary>
+              <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-slate-700">{scan.ocr_text}</pre>
+            </details>
+          )}
+        </div>
+      </section>
+
       <section className="grid grid-cols-2 gap-3">
         <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Expiry</p>
+          <p className="text-xs uppercase tracking-wide text-slate-500">Printed expiry date</p>
           <p className="mt-1 text-sm font-semibold text-slate-800">
-            {scan.expiry_date ?? "Not detected"}
+              {scan.expiry_date ?? (scan.expiry_text ? `${scan.expiry_text} · year not read` : (["unavailable", "legacy", "unknown"].includes(scan.ocr_provider ?? "unknown") ? "OCR setup or refresh needed" : "Not detected"))}
           </p>
+            {scan.expiry_text && !scan.expiry_date && (
+              <p className="text-xs text-slate-500">Partial stamp read{scan.expiry_label ? ` after “${scan.expiry_label}”` : ""}; no year was detected, so this was not used to calculate expiry.</p>
+            )}
+          {scan.expiry_date && scan.expiry_label && (
+            <p className="text-xs text-slate-500">Read after “{scan.expiry_label}”</p>
+          )}
           {scan.shelf_life_days !== undefined && scan.shelf_life_days !== null && (
             <p className="text-xs text-slate-500">
-              ≈ {scan.shelf_life_days} day(s) shelf life
+            {scan.shelf_life_days >= 0
+              ? `${scan.shelf_life_days} day(s) remaining`
+              : `${Math.abs(scan.shelf_life_days)} day(s) past the printed date`}
             </p>
           )}
         </div>
@@ -112,6 +212,11 @@ export default function ResultCard({ scan }: { scan: { id: Scan["id"] } & Partia
               ? `${scan.humidity_pct}% RH`
               : "RH —"}
           </p>
+          {scan.sensor_source && scan.sensor_source !== "user_entered" && (
+            <p className="mt-1 text-xs font-medium text-amber-800">
+              {scan.sensor_source === "demo_estimate" ? "Illustrative demo values · not measured" : scan.sensor_source === "mixed" ? "Mixed entered and demo values" : "Older scan · value source not recorded"}
+            </p>
+          )}
           <p className="text-xs text-slate-500">
             VOC index:{" "}
             {scan.voc_index !== undefined && scan.voc_index !== null

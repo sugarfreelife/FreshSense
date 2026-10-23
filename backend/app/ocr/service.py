@@ -1,43 +1,204 @@
-"""OCR service: tries easyocr only if installed; never fabricates dates."""
+"""Read printed food-package text and parse dates without guessing."""
+
+from pathlib import Path
+import re
+import shutil
 
 from app.ocr.date_parser import extract_expiry_date
 
+_easy_reader = None
+
+
+def _tesseract_command() -> str | None:
+    found = shutil.which("tesseract")
+    if found:
+        return found
+    for candidate in (
+        Path(r"C:\Program Files\Tesseract-OCR\tesseract.exe"),
+        Path(r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe"),
+    ):
+        if candidate.is_file():
+            return str(candidate)
+    return None
+
+
+def _read_tesseract(image_path: str, command: str) -> tuple[str, float | None]:
+    import pytesseract
+    from PIL import Image, ImageEnhance, ImageOps
+
+    pytesseract.pytesseract.tesseract_cmd = command
+    with Image.open(image_path) as source:
+        gray = ImageOps.grayscale(source)
+        gray.thumbnail((2200, 2200))
+        enlarged = gray.resize((gray.width * 2, gray.height * 2))
+        variants = (
+            ImageOps.autocontrast(gray),
+            ImageEnhance.Sharpness(ImageEnhance.Contrast(enlarged).enhance(1.8)).enhance(2.0),
+            ImageOps.autocontrast(enlarged).point(lambda pixel: 255 if pixel > 165 else 0),
+        )
+
+        candidates: list[tuple[tuple[int, int, float], str, float | None]] = []
+        for image in variants:
+            for page_mode in (6, 11):
+                config = f"--oem 3 --psm {page_mode}"
+                data = pytesseract.image_to_data(
+                    image, lang="eng", config=config, output_type=pytesseract.Output.DICT
+                )
+                lines: dict[tuple[str, str, str], list[str]] = {}
+                scores = []
+                for index, word in enumerate(data["text"]):
+                    word = str(word).strip()
+                    if not word:
+                        continue
+                    key = (data["block_num"][index], data["par_num"][index], data["line_num"][index])
+                    lines.setdefault(key, []).append(word)
+                    score = float(data["conf"][index])
+                    if score >= 0:
+                        scores.append(score)
+                text = "\n".join(" ".join(words) for words in lines.values()).strip()
+                confidence = sum(scores) / len(scores) / 100 if scores else None
+                parsed = extract_expiry_date(text)
+                candidates.append(((int(parsed["date_detected"]), len(text), confidence or 0), text, confidence))
+
+    _, text, confidence = max(candidates, key=lambda candidate: candidate[0])
+    return text, confidence
+
+
+def _read_easyocr(image_path: str) -> tuple[str, float | None]:
+    global _easy_reader
+    import torch
+
+    # Prevent PyTorch from launching dozens of CPU threads on a small OCR job.
+    # On CPU-only Windows machines that oversubscription can make inference
+    # slower than the browser's request timeout.
+    try:
+        torch.set_num_threads(min(4, torch.get_num_threads()))
+        torch.set_num_interop_threads(1)
+    except RuntimeError:
+        pass
+    import easyocr  # type: ignore[import-not-found]
+
+    if _easy_reader is None:
+        model_cache = Path(__file__).resolve().parents[2] / "uploads" / ".easyocr"
+        model_cache.mkdir(parents=True, exist_ok=True)
+        _easy_reader = easyocr.Reader(
+            ["en"],
+            gpu=False,
+            model_storage_directory=str(model_cache),
+            user_network_directory=str(model_cache / "user_network"),
+            download_enabled=True,
+        )
+    from PIL import Image
+    import numpy as np
+
+    with Image.open(image_path) as source:
+        image = source.convert("RGB")
+        width, height = image.size
+        # Read the expiry stamp and its compact printed date separately. Each
+        # crop is enlarged so the stamped characters fill more of the OCR view.
+        stamp = image.crop((int(width * .12), int(height * .25), int(width * .72), int(height * .72)))
+        stamp = stamp.resize((stamp.width * 3, stamp.height * 3))
+        date_area = image.crop((int(width * .47), int(height * .38), int(width * .65), int(height * .54)))
+        date_area = date_area.resize((date_area.width * 5, date_area.height * 5))
+
+    stamp_results = _easy_reader.readtext(
+        np.array(stamp), detail=1, paragraph=False, mag_ratio=2.5,
+        low_text=0.25, text_threshold=0.45, link_threshold=0.3,
+    )
+    date_results = _easy_reader.readtext(
+        np.array(date_area), detail=1, paragraph=False, mag_ratio=2.5,
+        low_text=0.25, text_threshold=0.45, link_threshold=0.3,
+        rotation_info=[90, 180, 270],
+    )
+    stamp_text = "\n".join(str(result[1]) for result in stamp_results) if stamp_results else ""
+    date_text = "\n".join(str(result[1]) for result in date_results) if date_results else ""
+    # The label and date may be detected in different views of the same stamp.
+    text = "\n".join(part for part in (stamp_text, date_text) if part)
+    stamp_label = next(
+        (
+            str(result[1])
+            for result in stamp_results
+            if float(result[2]) >= 0.7
+            and re.search(r"\b(?:BEST(?:\s+(?:BEFORE|BY))?|EXP(?:IR(?:Y|ATION))?|USE\s+BY|BBE|BB)\b", str(result[1]), re.I)
+        ),
+        None,
+    )
+    partial_date = next(
+        (
+            str(result[1])
+            for result in date_results
+            if float(result[2]) >= 0.45
+            and re.search(r"\b(?:[0-9OQ]{1,2}\s*[A-Z]{3,9}|[A-Z]{3,9}\s*[0-9OQ]{1,2})\b", str(result[1]), re.I)
+        ),
+        None,
+    )
+    if stamp_label and partial_date:
+        text = f"{text}\n{stamp_label}\n{partial_date}"
+    scores = [float(result[2]) for result in stamp_results + date_results if len(result) > 2]
+    return text, sum(scores) / len(scores) if scores else None
+
+def _candidate_score(text: str, confidence: float | None) -> tuple[int, int, float]:
+    parsed = extract_expiry_date(text)
+    has_expiry_label = bool(
+        re.search(r"\b(?:exp|expiry|expiration|best\s*before|use\s*by|sell\s*by)\b", text, re.I)
+    )
+    useful_chars = sum(character.isalnum() for character in text)
+    score = int(parsed["date_detected"]) * 100 + int(bool(parsed.get("expiry_text"))) * 60 + int(has_expiry_label) * 30
+    return score, useful_chars, confidence or 0
+
 
 def extract_text_from_image(image_path: str, raw_text_override: str | None = None) -> dict:
-    """Return {raw_text, expiry_date, date_detected, provider}.
+    """Return recognized text, expiry date, confidence and the OCR engine used."""
+    candidates: list[tuple[str, float | None, str]] = []
+    errors: list[str] = []
+    command = _tesseract_command()
+    if command:
+        try:
+            raw_text, confidence = _read_tesseract(image_path, command)
+            candidates.append((raw_text, confidence, "tesseract"))
+        except Exception:
+            errors.append("Tesseract could not process the image.")
 
-    If easyocr is unavailable (default Phase 1), returns date_detected False
-    with empty raw_text unless raw_text_override is supplied (used by tests
-    and manual label entry). Never invents a date.
-    """
-    provider = "easyocr"
-    raw_text = ""
-    try:
-        import easyocr  # type: ignore  # optional Phase-2 dependency
+    # Try neural OCR when Tesseract misses the expiry label or reports weak text.
+    tesseract_text, tesseract_confidence = next(
+        ((text, confidence) for text, confidence, provider in candidates if provider == "tesseract"),
+        ("", None),
+    )
+    tesseract_parsed = extract_expiry_date(tesseract_text)
+    if not command or not tesseract_parsed["date_detected"] or (tesseract_confidence or 0) < 0.55:
+        try:
+            raw_text, confidence = _read_easyocr(image_path)
+            candidates.append((raw_text, confidence, "easyocr"))
+        except ImportError:
+            if not command:
+                errors.append("Install Tesseract OCR or the optional EasyOCR package.")
+        except Exception:
+            errors.append("EasyOCR could not process the image.")
 
-        reader = easyocr.Reader(["en"], gpu=False)
-        results = reader.readtext(image_path)
-        raw_text = " ".join(r[1] for r in results) if results else ""
-    except ImportError:
-        provider = "unavailable"
-        raw_text = raw_text_override or ""
-    except Exception:
-        provider = "easyocr-error"
-        raw_text = raw_text_override or ""
+    if candidates:
+        raw_text, confidence, provider = max(
+            candidates,
+            key=lambda candidate: _candidate_score(candidate[0], candidate[1]),
+        )
+        message = ""
+    else:
+        raw_text, confidence = "", None
+        provider = "unavailable" if not command and any("Install " in error for error in errors) else "tesseract_error"
+        message = " ".join(errors) or "The OCR engine could not read this image. Try a closer, brighter photo of the printed date."
 
-    if raw_text_override is not None and not raw_text:
-        raw_text = raw_text_override
+    if raw_text_override is not None and not raw_text.strip():
+        raw_text = raw_text_override.strip()
+        provider = "manual"
+        confidence = None
 
     parsed = extract_expiry_date(raw_text)
     return {
         "raw_text": raw_text,
         "expiry_date": parsed["expiry_date"].isoformat() if parsed["expiry_date"] else None,
         "date_detected": parsed["date_detected"],
+        "expiry_label": parsed.get("expiry_label"),
+        "expiry_text": parsed.get("expiry_text"),
         "provider": provider,
-        "message": (
-            "OCR engine not installed (Phase-2 optional dependency). "
-            "No date fabricated; supply label text manually."
-            if provider == "unavailable" and not parsed["date_detected"]
-            else ""
-        ),
+        "confidence": round(confidence, 3) if confidence is not None else None,
+        "message": message if not parsed["date_detected"] else "",
     }

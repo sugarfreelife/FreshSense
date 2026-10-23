@@ -69,6 +69,10 @@ class OCRResult(Base):
     raw_text: Mapped[str] = mapped_column(Text, default="", nullable=False)
     expiry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     date_detected: Mapped[bool] = mapped_column(default=False, nullable=False)
+    provider: Mapped[str] = mapped_column(String(50), default="unknown", nullable=False)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    expiry_label: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    expiry_text: Mapped[str | None] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     scan: Mapped[FoodScan] = relationship(back_populates="ocr")
@@ -83,6 +87,7 @@ class SensorReading(Base):
     gas_value: Mapped[float | None] = mapped_column(Float, nullable=True)
     temperature: Mapped[float | None] = mapped_column(Float, nullable=True)
     humidity: Mapped[float | None] = mapped_column(Float, nullable=True)
+    source: Mapped[str] = mapped_column(String(30), default="user_entered", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     scan: Mapped[FoodScan | None] = relationship(back_populates="sensor_readings")

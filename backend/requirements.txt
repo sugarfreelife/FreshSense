@@ -8,6 +8,9 @@ passlib[bcrypt]
 bcrypt==4.0.1
 python-multipart
 pillow>=11.3
+pytesseract>=0.3.13
+python-dateutil>=2.9
+easyocr>=1.7.2
 pydantic>=2
 pydantic-settings
 python-dotenv
@@ -15,6 +18,3 @@ pytest
 httpx
 email-validator
 
-# Optional Phase 2 (NOT installed by default):
-# torch
-# easyocr

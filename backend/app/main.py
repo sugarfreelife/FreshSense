@@ -2,7 +2,7 @@ import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 
 from app.api.v1.router import router as v1_router
 from app.core.config import settings
@@ -14,6 +14,23 @@ from app.seed_demo import seed_demo_users
 # exclusively through Alembic migrations.
 if settings.sqlalchemy_url.startswith("sqlite:"):
     Base.metadata.create_all(bind=engine)
+    ocr_columns = {column["name"] for column in inspect(engine).get_columns("ocr_results")}
+    with engine.begin() as connection:
+        if "provider" not in ocr_columns:
+            connection.execute(
+                text("ALTER TABLE ocr_results ADD COLUMN provider VARCHAR(50) NOT NULL DEFAULT 'legacy'")
+            )
+        if "confidence" not in ocr_columns:
+            connection.execute(text("ALTER TABLE ocr_results ADD COLUMN confidence FLOAT"))
+        if "expiry_label" not in ocr_columns:
+            connection.execute(text("ALTER TABLE ocr_results ADD COLUMN expiry_label VARCHAR(50)"))
+        if "expiry_text" not in ocr_columns:
+            connection.execute(text("ALTER TABLE ocr_results ADD COLUMN expiry_text VARCHAR(50)"))
+        sensor_columns = {column["name"] for column in inspect(engine).get_columns("sensor_readings")}
+        if "source" not in sensor_columns:
+            connection.execute(
+                text("ALTER TABLE sensor_readings ADD COLUMN source VARCHAR(30) NOT NULL DEFAULT 'legacy'")
+            )
     seed_demo_users()
 
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)

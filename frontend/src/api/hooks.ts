@@ -26,7 +26,7 @@ const AuthResponseSchema = z.object({
 export type AuthResponse = z.infer<typeof AuthResponseSchema>;
 
 const PassportEvidenceSchema = z.object({
-  key: z.enum(["vision", "expiry", "sensor"]),
+  key: z.enum(["vision", "product", "expiry", "sensor"]),
   title: z.string(),
   state: z.enum(["used", "warning", "missing", "context"]),
   observation: z.string(),
@@ -62,6 +62,13 @@ const NestedScanSchema = z.object({
   tracked_item_label: z.string().nullable().optional(),
   image_url: z.string().optional().nullable(),
   food_label: z.string().optional().nullable(),
+  product: z.object({
+    category: z.string().nullable().optional(),
+    product_name: z.string().nullable().optional(),
+    confidence: z.number().nullable().optional(),
+    evidence: z.array(z.string()).optional().default([]),
+    source: z.enum(["package_text", "user_label", "unrecognized"]).optional().default("unrecognized")
+  }).optional(),
   notes: z.string().optional().nullable(),
   created_at: z.string(),
   vision: z.object({
@@ -77,12 +84,17 @@ const NestedScanSchema = z.object({
     raw_text: z.string(),
     expiry_date: z.string().nullable().optional(),
     date_detected: z.boolean(),
+    provider: z.string().optional(),
+    confidence: z.number().nullable().optional(),
+    expiry_label: z.string().nullable().optional(),
+    expiry_text: z.string().nullable().optional(),
     created_at: z.string().optional()
   }).nullable().optional(),
   sensor: z.object({
     gas_value: z.number().nullable().optional(),
     temperature: z.number().nullable().optional(),
     humidity: z.number().nullable().optional(),
+    source: z.enum(["user_entered", "demo_estimate", "mixed", "legacy"]).optional().default("legacy"),
     created_at: z.string()
   }).nullable().optional(),
   assessment: z.object({
@@ -105,7 +117,8 @@ export const ScanSchema = NestedScanSchema.transform((scan) => ({
   image_url: scan.image_url
     ? new URL(scan.image_url, apiClient.defaults.baseURL).toString()
     : null,
-  food_type: scan.food_label ?? (scan.vision?.food_type === "unknown" ? null : scan.vision?.food_type ?? null),
+  food_type: scan.product?.category ?? scan.food_label ?? (scan.vision?.food_type === "unknown" ? null : scan.vision?.food_type ?? null),
+  product: scan.product ?? { category: null, product_name: null, confidence: null, evidence: [], source: "unrecognized" as const },
   freshness: scan.assessment?.freshness ?? scan.vision?.freshness ?? null,
   freshness_label: scan.assessment?.freshness ?? scan.vision?.freshness ?? null,
   confidence: scan.assessment?.confidence ?? null,
@@ -114,10 +127,16 @@ export const ScanSchema = NestedScanSchema.transform((scan) => ({
   confidence_kind: scan.vision?.confidence_kind ?? null,
   visual_evidence: scan.vision?.visual_evidence ?? {},
   expiry_date: scan.ocr?.expiry_date ?? null,
+  expiry_label: scan.ocr?.expiry_label ?? null,
+  expiry_text: scan.ocr?.expiry_text ?? null,
+  ocr_text: scan.ocr?.raw_text ?? "",
+  ocr_provider: scan.ocr?.provider ?? "unknown",
+  ocr_confidence: scan.ocr?.confidence ?? null,
   shelf_life_days: scan.assessment?.days_remaining ?? null,
   voc_index: scan.sensor?.gas_value ?? null,
   temperature_c: scan.sensor?.temperature ?? null,
   humidity_pct: scan.sensor?.humidity ?? null,
+  sensor_source: scan.sensor?.source ?? "legacy",
   recommendation: scan.assessment?.recommendation ?? null,
   sources: scan.assessment?.modalities_used ?? [],
   warnings: scan.assessment?.warnings ?? [],
@@ -281,6 +300,7 @@ export interface CreateScanInput {
   temperature_c?: number;
   humidity_pct?: number;
   voc_index?: number;
+  sensor_source?: "user_entered" | "demo_estimate" | "mixed";
   notes?: string;
 }
 
@@ -299,11 +319,28 @@ export function useCreateScan(): UseMutationResult<Scan, Error, CreateScanInput>
         form.append("humidity_pct", String(input.humidity_pct));
       if (input.voc_index !== undefined)
         form.append("voc_index", String(input.voc_index));
+      if (input.sensor_source) form.append("sensor_source", input.sensor_source);
       if (input.notes) form.append("notes", input.notes);
       const res = await apiClient.post("/scans", form);
       return ScanSchema.parse(res.data);
     },
     onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["scans"] });
+      void qc.invalidateQueries({ queryKey: ["tracked-items"] });
+      void qc.invalidateQueries({ queryKey: ["tracked-item"] });
+    }
+  });
+}
+
+export function useReanalyzeScan(id: string): UseMutationResult<Scan, Error, void> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await apiClient.post(`/scans/${id}/reanalyze`, undefined, { timeout: 180000 });
+      return ScanSchema.parse(res.data);
+    },
+    onSuccess: (scan) => {
+      qc.setQueryData(["scan", id], scan);
       void qc.invalidateQueries({ queryKey: ["scans"] });
       void qc.invalidateQueries({ queryKey: ["tracked-items"] });
       void qc.invalidateQueries({ queryKey: ["tracked-item"] });

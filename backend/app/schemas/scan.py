@@ -21,9 +21,21 @@ class OCRResultOut(BaseModel):
     raw_text: str
     expiry_date: date | None = None
     date_detected: bool = False
+    provider: str = "unknown"
+    confidence: float | None = None
+    expiry_label: str | None = None
+    expiry_text: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ProductRecognitionOut(BaseModel):
+    category: str | None = None
+    product_name: str | None = None
+    confidence: float | None = None
+    evidence: list[str] = Field(default_factory=list)
+    source: Literal["package_text", "user_label", "unrecognized"] = "unrecognized"
 
 
 class AssessmentOut(BaseModel):
@@ -43,11 +55,12 @@ class SensorEvidenceOut(BaseModel):
     gas_value: float | None = None
     temperature: float | None = None
     humidity: float | None = None
+    source: Literal["user_entered", "demo_estimate", "mixed", "legacy"] = "legacy"
     created_at: datetime
 
 
 class PassportEvidenceOut(BaseModel):
-    key: Literal["vision", "expiry", "sensor"]
+    key: Literal["vision", "product", "expiry", "sensor"]
     title: str
     state: Literal["used", "warning", "missing", "context"]
     observation: str
@@ -84,6 +97,7 @@ class ScanOut(BaseModel):
     image_url: str
     food_label: str | None = None
     notes: str | None = None
+    product: ProductRecognitionOut = Field(default_factory=ProductRecognitionOut)
     created_at: datetime
     vision: VisionPredictionOut | None = None
     ocr: OCRResultOut | None = None

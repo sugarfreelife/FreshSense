@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CreateScanInput, TrackedItem } from "../api/hooks";
 
 export interface ScanFormValue extends CreateScanInput {}
@@ -20,10 +20,23 @@ export default function ScanForm({
   const [temperature, setTemperature] = useState("");
   const [humidity, setHumidity] = useState("");
   const [voc, setVoc] = useState("");
+  const sensorTouched = useRef({ temperature: false, humidity: false, voc: false });
   const [notes, setNotes] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!image || !foodType.trim()) return;
+    const type = foodType.toLowerCase();
+    const temp = /frozen|ice cream/.test(type) ? "-18"
+      : /milk|dairy|fish|seafood|meat|chicken|egg|yogurt|cheese/.test(type) ? "4"
+      : /produce|fruit|vegetable|apple|tomato/.test(type) ? "8" : "22";
+    const rh = /produce|fruit|vegetable|spinach|lettuce/.test(type) ? "85" : "50";
+    if (!sensorTouched.current.temperature) setTemperature(temp);
+    if (!sensorTouched.current.humidity) setHumidity(rh);
+    if (!sensorTouched.current.voc) setVoc("21");
+  }, [image, foodType]);
 
   const pickFile = (file: File | undefined) => {
     setFormError(null);
@@ -93,6 +106,9 @@ export default function ScanForm({
       temperature_c: t,
       humidity_pct: h,
       voc_index: v,
+      sensor_source: Object.values(sensorTouched.current).every((touched) => !touched)
+        ? "demo_estimate"
+        : Object.values(sensorTouched.current).every(Boolean) ? "user_entered" : "mixed",
       notes: notes.trim() || undefined
     });
   };
@@ -223,7 +239,7 @@ export default function ScanForm({
               type="number"
               inputMode="decimal"
               value={temperature}
-              onChange={(e) => setTemperature(e.target.value)}
+              onChange={(e) => { sensorTouched.current.temperature = true; setTemperature(e.target.value); }}
               placeholder="4"
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
             />
@@ -234,7 +250,7 @@ export default function ScanForm({
               type="number"
               inputMode="decimal"
               value={humidity}
-              onChange={(e) => setHumidity(e.target.value)}
+              onChange={(e) => { sensorTouched.current.humidity = true; setHumidity(e.target.value); }}
               placeholder="60"
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
             />
@@ -245,12 +261,18 @@ export default function ScanForm({
               type="number"
               inputMode="decimal"
               value={voc}
-              onChange={(e) => setVoc(e.target.value)}
+              onChange={(e) => { sensorTouched.current.voc = true; setVoc(e.target.value); }}
               placeholder="—"
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
             />
           </label>
         </div>
+        <p className="mt-2 text-xs text-amber-800" aria-live="polite">
+          {image && foodType.trim()
+            ? "Illustrative demo readings are auto-filled and editable; they are not measured by a real sensor. Clear a field to omit it."
+            : "Choose a photo and enter a food type to auto-fill editable demo readings. These are examples, not live sensor measurements."}
+          {image && foodType.trim() && <span className="block">VOC cannot be inferred from a photo; the shown value is only a demo placeholder.</span>}
+        </p>
         <label className="mt-3 block text-sm">
           <span className="text-slate-600">Notes</span>
           <textarea

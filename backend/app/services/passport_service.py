@@ -22,6 +22,7 @@ def build_passport(
     ocr: dict | None,
     sensor: dict | None,
     assessment: dict | None,
+    product: dict | None = None,
 ) -> dict:
     assessment = assessment or {}
     modalities = set(assessment.get("modalities_used") or [])
@@ -99,6 +100,50 @@ def build_passport(
             "explanation": "Image evidence did not contribute to this result.",
         })
 
+    product = product or {}
+    category = product.get("category")
+    product_name = product.get("product_name")
+    product_source = product.get("source", "unrecognized")
+    if category:
+        product_state = "used" if product_source == "package_text" else "context"
+        if product_source == "package_text":
+            matched = ", ".join(product.get("evidence") or [])
+            observation = f"Package text suggests {category}" + (f" ({matched})" if matched else "") + "."
+            explanation = "The category was matched from text read on the package; it is a label-based estimate."
+        else:
+            observation = f"{product_name or category} was entered as the food label."
+            explanation = "This category came from the user label, not automatic image recognition."
+    elif (ocr or {}).get("raw_text"):
+        product_state = "context"
+        observation = "Package text was found, but it did not identify a supported food category."
+        explanation = "The printed text is retained below so the category match can be checked."
+    else:
+        product_state = "missing"
+        observation = "No product category could be identified from visible package text."
+        explanation = "A clear photo of the product name or front label helps identify packaged items."
+    evidence.append({
+        "key": "product",
+        "title": "Product category",
+        "state": product_state,
+        "observation": observation,
+        "explanation": explanation,
+    })
+    timeline.append({
+        "key": "product",
+        "title": "Product category checked",
+        "state": "complete" if category else "missing",
+        "detail": (
+            f"{category} matched from package text."
+            if product_source == "package_text" and category
+            else f"{category} supplied as the user label."
+            if category
+            else observation
+        ),
+        "occurred_at": (ocr or {}).get("created_at") or created_at,
+    })
+    if (ocr or {}).get("provider") in {"unavailable", "tesseract_unavailable", "legacy"}:
+        limitations.append("Automatic package-text reading is unavailable until an OCR engine is installed.")
+
     expiry_date = (ocr or {}).get("expiry_date")
     if (
         vision
@@ -129,23 +174,37 @@ def build_passport(
             "key": "expiry",
             "title": "Expiry label checked",
             "state": "warning" if state == "warning" else "complete",
-            "detail": f"OCR detected {expiry_date}.",
+            "detail": f"{(ocr or {}).get('provider', 'OCR')} read {expiry_date}.",
             "occurred_at": (ocr or {}).get("created_at") or created_at,
         })
         limitations.append("OCR can misread printed dates; check the package label directly.")
     elif (ocr or {}).get("date_detected") or (ocr or {}).get("raw_text"):
+        partial_stamp = (ocr or {}).get("expiry_text")
+        label = (ocr or {}).get("expiry_label")
         evidence.append({
             "key": "expiry",
             "title": "Expiry label",
             "state": "context",
-            "observation": "Text was found, but no expiry date could be read.",
-            "explanation": "OCR text without a parsed date did not affect the expiry rules.",
+            "observation": (
+                f"Partial stamp read: {partial_stamp} after {label or 'an expiry label'}; the year was not read."
+                if partial_stamp
+                else "Text was found, but no expiry date could be read."
+            ),
+            "explanation": (
+                "The partial date was kept as evidence but not used to calculate expiry because it has no year."
+                if partial_stamp
+                else "OCR text without a parsed date did not affect the expiry rules."
+            ),
         })
         timeline.append({
             "key": "expiry",
             "title": "Expiry label checked",
             "state": "complete",
-            "detail": "Text was found, but no expiry date could be parsed.",
+            "detail": (
+                f"{(ocr or {}).get('provider', 'OCR')} read {(ocr or {}).get('expiry_text')} without a year."
+                if (ocr or {}).get("expiry_text")
+                else f"{(ocr or {}).get('provider', 'OCR')} found text, but no expiry date could be parsed."
+            ),
             "occurred_at": (ocr or {}).get("created_at") or created_at,
         })
         limitations.append("OCR can miss or misread printed dates; check the package label directly.")
@@ -174,6 +233,8 @@ def build_passport(
         if sensor.get("humidity") is not None:
             values.append(f"{sensor['humidity']:g}% RH")
         gas_value = sensor.get("gas_value")
+        sensor_source = sensor.get("source", "user_entered")
+        demo_estimate = sensor_source in {"demo_estimate", "mixed"}
         gas_high = gas_value is not None and gas_value >= 700
         if gas_high and vision and vision.get("freshness") == "fresh":
             conflicts.append({
@@ -187,18 +248,24 @@ def build_passport(
             if gas_high
             else "VOC, when supplied, is checked against a fixed threshold; temperature and humidity are recorded as context."
         )
+        if sensor_source == "demo_estimate":
+            explanation = "These are illustrative demo values, not measurements from a physical sensor. VOC cannot be inferred from an image. Replace or clear them before treating the result as measured evidence."
+        elif sensor_source == "mixed":
+            explanation = "This row combines user-entered values with auto-filled demo estimates; it is not a complete physical sensor measurement. Review each value."
+        elif sensor_source == "legacy":
+            explanation = "This older scan does not record where these values came from. Treat them as context, not verified sensor measurements."
         evidence.append({
             "key": "sensor",
             "title": "Sensor readings",
-            "state": state if "sensor" in modalities else "context",
-            "observation": ", ".join(values) + ".",
+            "state": "context" if demo_estimate or sensor_source == "legacy" else (state if "sensor" in modalities else "context"),
+            "observation": ("Demo estimates: " if sensor_source == "demo_estimate" else "Mixed demo and entered values: " if sensor_source == "mixed" else "") + ", ".join(values) + ".",
             "explanation": explanation,
         })
         timeline.append({
             "key": "sensor",
-            "title": "Sensor readings added",
-            "state": "warning" if gas_high else "complete",
-            "detail": ", ".join(values) + ".",
+            "title": "Demo context added" if demo_estimate else "Environment context saved" if sensor_source == "legacy" else "Sensor readings added",
+            "state": "complete" if demo_estimate else ("warning" if gas_high else "complete"),
+            "detail": ("Illustrative values, not measured: " if sensor_source == "demo_estimate" else "Contains illustrative values: " if sensor_source == "mixed" else "Source not recorded: " if sensor_source == "legacy" else "") + ", ".join(values) + ".",
             "occurred_at": sensor.get("created_at") or created_at,
         })
     else:
