@@ -57,6 +57,7 @@ backend/uploads/*
 data/images/
 data/reports/
 data/metadata/labels*.csv
+data/metadata/package_labels.csv
 data/metadata/paired_collection.csv
 
 # ================= Logs / temp =================

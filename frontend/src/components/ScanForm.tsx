@@ -138,6 +138,9 @@ export default function ScanForm({
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4">
         <h2 className="text-sm font-semibold text-slate-800">1. Food photo</h2>
+        <p className="mt-1 text-xs leading-relaxed text-slate-600">
+          For package recognition, frame the product name and printed date together. Move close, tap to focus, avoid glare, and retake if the date looks blurry. For loose produce, fill the frame with the food.
+        </p>
         {!previewUrl ? (
           <div className="mt-3 grid grid-cols-2 gap-2">
             <button
@@ -195,9 +198,13 @@ export default function ScanForm({
             type="text"
             value={foodType}
             onChange={(e) => setFoodType(e.target.value)}
-            placeholder="e.g. milk, bread, apple"
+            placeholder="e.g. milk, canned tuna, bread, apple"
+            list="freshsense-food-suggestions"
             className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
           />
+          <datalist id="freshsense-food-suggestions">
+            {["Milk", "Yogurt", "Cheese", "Eggs", "Canned tuna", "Canned beans", "Bread", "Chicken", "Apples", "Frozen vegetables", "Juice", "Other"].map((choice) => <option key={choice} value={choice} />)}
+          </datalist>
         </label>
         <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
           <label className="block text-sm">

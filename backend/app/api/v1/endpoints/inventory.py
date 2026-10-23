@@ -34,6 +34,10 @@ def _out(item: InventoryItem) -> InventoryItemOut:
         quantity=item.quantity,
         expiry_date=item.expiry_date,
         expiry_source=item.expiry_source,
+        reminder_days_before=item.reminder_days_before,
+        storage_location=item.storage_location,
+        opened_date=item.opened_date,
+        storage_notes=item.storage_notes,
         days_remaining=days_remaining,
         status=item_status,
         source_scan_id=item.source_scan_id,
@@ -74,6 +78,10 @@ def create_inventory_item(
         quantity=payload.quantity,
         expiry_date=payload.expiry_date,
         expiry_source=payload.expiry_source,
+        reminder_days_before=payload.reminder_days_before,
+        storage_location=payload.storage_location,
+        opened_date=payload.opened_date,
+        storage_notes=payload.storage_notes.strip() if payload.storage_notes and payload.storage_notes.strip() else None,
     )
     db.add(item)
     db.commit()
@@ -100,10 +108,16 @@ def update_inventory_item(
             raise HTTPException(status_code=422, detail="Product name is required")
     if "category" in changes and changes["category"]:
         changes["category"] = changes["category"].strip() or None
+    if "storage_notes" in changes and changes["storage_notes"]:
+        changes["storage_notes"] = changes["storage_notes"].strip() or None
     for key, value in changes.items():
         setattr(item, key, value)
     if item.expiry_date is None and item.expiry_source != "unknown":
         raise HTTPException(status_code=422, detail="Choose unknown when no expiry date is available.")
+    if item.expiry_date is None and item.reminder_days_before is not None:
+        if "reminder_days_before" in changes and changes["reminder_days_before"] is not None:
+            raise HTTPException(status_code=422, detail="Add a package date before setting a reminder.")
+        item.reminder_days_before = None
     if item.expiry_date is not None and item.expiry_source == "unknown":
         item.expiry_source = "user_entered"
     if "expiry_date" in changes and "expiry_source" not in changes:

@@ -175,6 +175,10 @@ export const InventoryItemSchema = z.object({
   quantity: z.number(),
   expiry_date: z.string().nullable(),
   expiry_source: z.enum(["ocr_confirmed", "user_entered", "unknown"]),
+  reminder_days_before: z.number().nullable(),
+  storage_location: z.enum(["unknown", "pantry", "refrigerator", "freezer", "room_temperature", "other"]),
+  opened_date: z.string().nullable(),
+  storage_notes: z.string().nullable(),
   days_remaining: z.number().nullable(),
   status: z.enum(["expired", "urgent", "soon", "stored", "unknown"]),
   source_scan_id: z.string().nullable(),
@@ -189,10 +193,14 @@ export interface CreateInventoryInput {
   quantity: number;
   expiry_date?: string;
   expiry_source: "ocr_confirmed" | "user_entered" | "unknown";
+  reminder_days_before?: 1 | 3 | 7 | null;
+  storage_location?: "unknown" | "pantry" | "refrigerator" | "freezer" | "room_temperature" | "other";
+  opened_date?: string | null;
+  storage_notes?: string | null;
   source_scan_id?: string;
 }
 
-export type UpdateInventoryInput = Partial<Pick<CreateInventoryInput, "product_name" | "category" | "quantity" | "expiry_source">> & { expiry_date?: string | null };
+export type UpdateInventoryInput = Partial<Pick<CreateInventoryInput, "product_name" | "quantity" | "expiry_source" | "reminder_days_before" | "storage_location" | "opened_date" | "storage_notes">> & { category?: string | null; expiry_date?: string | null };
 
 /* ---------- Queries ---------- */
 

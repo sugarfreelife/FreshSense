@@ -40,6 +40,7 @@ export default defineConfig({
         ]
       },
       workbox: {
+        importScripts: ["notification-click.js"],
         navigateFallback: "/offline.html",
         globPatterns: ["**/*.{js,css,html,svg,png,ico}"],
         runtimeCaching: [

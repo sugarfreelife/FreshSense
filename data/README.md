@@ -1,5 +1,31 @@
 # FreshSense evaluation data
 
+## Package label recognition benchmark
+
+For package OCR/category testing, use
+[`metadata/package_label_template.csv`](metadata/package_label_template.csv).
+The manifest stays local and points to local image files. `expected_category`
+must use the package-category taxonomy shown by the app; `expected_expiry_date`
+is an ISO `YYYY-MM-DD` date or blank when no package date exists. Set `group_id`
+to a stable package/batch capture group and keep each group wholly in one split.
+Only `split=validation` rows are scored. Avoid photos of people and private
+labels; obtain permission before collecting package images.
+
+Run the end-to-end held-out photo evaluation from the repository root:
+
+```bash
+python backend/scripts/evaluate_package_labels.py \
+  data/metadata/package_labels.csv \
+  --output data/reports/package_labels.json
+```
+
+It reports category accuracy, macro precision/recall/F1, a confusion matrix,
+exact expiry-date precision/recall, and OCR engine counts. These values measure
+only the supplied validation groups and should be reported with their counts.
+The script does not train a model and reports no fabricated scores when the
+manifest has no validation images. Real collection and annotation remain
+necessary before claiming recognition accuracy.
+
 There are no labeled paired sensor/expiry samples, so the public image data
 cannot support Passport fusion metrics. A local, ignored 3,032-image sample
 from AgriFreshNET and FruQ-DB has been prepared for an image-only baseline; it

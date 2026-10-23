@@ -9,6 +9,8 @@ from app.core.enums import FreshnessEnum
 from app.schemas.assessment import AssessmentRequest
 from app.schemas.auth import UserCreate, UserLogin
 from app.schemas.sensor import SensorReadingCreate
+from app.schemas.inventory import InventoryItemCreate
+from app.ocr.product_parser import recognize_product
 from app.services.decision_service import decide
 from app.utils.files import validate_mime, validate_size
 
@@ -68,6 +70,29 @@ def test_assessment_payload_rejects_invalid_freshness_and_confidence():
     with pytest.raises(ValidationError):
         AssessmentRequest(vision_confidence=1.1)
     assert AssessmentRequest(vision_freshness="fresh", vision_confidence=0).vision_confidence == 0
+
+
+def test_inventory_requires_a_date_before_enabling_reminders():
+    batch = InventoryItemCreate(
+        product_name="Milk",
+        expiry_date="2026-11-01",
+        expiry_source="user_entered",
+        reminder_days_before=3,
+        storage_location="refrigerator",
+    )
+    assert batch.reminder_days_before == 3
+    assert batch.storage_location == "refrigerator"
+    with pytest.raises(ValidationError):
+        InventoryItemCreate(product_name="Milk", reminder_days_before=3)
+
+
+def test_product_recognition_handles_packaged_categories_with_evidence():
+    fish = recognize_product("Ocean tuna chunks in brine, best before 01/11/2026")
+    bread = recognize_product("Whole wheat bread - best before 01/11/2026")
+    assert fish["category"] == "Canned fish"
+    assert "tuna" in fish["evidence"]
+    assert bread["category"] == "Bread & bakery"
+    assert bread["source"] == "package_text"
 
 
 def test_vision_resize_does_not_add_black_borders(tmp_path):

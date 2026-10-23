@@ -50,7 +50,7 @@ If the application database already has the exact initial schema created by an o
 ## Flow
 PWA → register/login → scan (camera/upload + optional context) → vision/OCR/decision → Freshness Passport → confirm or enter the package date → record the purchased quantity as a pantry batch → follow the date watch and scan history.
 
-The Pantry keeps each purchase batch separate, so the same product can have a different quantity and label date on each purchase. If OCR does not produce a date, stock intake asks the user to read and enter the package date or explicitly save the batch without one. The pantry's “use next” cue sorts recorded dates and explains its recommendation; it is an organizing aid, not a food-safety verdict. Inventory is private to the signed-in user.
+The Pantry keeps each purchase batch separate, so the same product can have a different quantity and label date on each purchase. If OCR does not produce a date, stock intake asks the user to read and enter the package date or explicitly save the batch without one. Each batch can also record storage location, opened date, notes, and an optional reminder window. Browser alerts are checked while the app is open; the pantry's “use next” cue sorts recorded dates and explains its recommendation. These are organizing aids, not food-safety verdicts. Inventory is private to the signed-in user. See [`DEMO_GUIDE.md`](DEMO_GUIDE.md) for the presentation flow, phone smoke-check, and package-label evaluation.
 
 Scans are paginated (20 per request by default). Uploaded photos are returned through an authenticated, non-cacheable endpoint rather than public static hosting. Apply the new Alembic migration before starting an existing database.
 

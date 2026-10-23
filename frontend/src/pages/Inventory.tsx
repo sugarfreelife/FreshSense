@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useCreateInventoryItem, useDeleteInventoryItem, useInventory, useUpdateInventoryItem, type InventoryItem } from "../api/hooks";
 import Layout from "../components/Layout";
@@ -32,9 +32,85 @@ function sourceCopy(source: InventoryItem["expiry_source"]): string {
   return "No date recorded";
 }
 
+function daysUntil(dateValue: string, now = new Date()): number {
+  const [year, month, day] = dateValue.split("-").map(Number);
+  return Math.round((Date.UTC(year, month - 1, day) - Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())) / 86_400_000);
+}
+
+function InventoryReminders({ items }: { items: InventoryItem[] }) {
+  const [permission, setPermission] = useState<NotificationPermission | "unsupported">("default");
+  const [today, setToday] = useState(() => new Date());
+  const notified = useRef(new Set<string>());
+  const due = items.filter((item) => item.expiry_date && item.reminder_days_before !== null && item.reminder_days_before !== undefined && daysUntil(item.expiry_date, today) >= 0 && daysUntil(item.expiry_date, today) <= item.reminder_days_before);
+
+  useEffect(() => {
+    setPermission("Notification" in window ? Notification.permission : "unsupported");
+  }, []);
+
+  useEffect(() => {
+    const check = () => {
+      const now = new Date();
+      setToday(now);
+      if (!("Notification" in window) || Notification.permission !== "granted") return;
+      for (const item of items) {
+        if (!item.expiry_date || item.reminder_days_before == null) continue;
+        const remaining = daysUntil(item.expiry_date, now);
+        if (remaining < 0 || remaining > item.reminder_days_before) continue;
+        const marker = `freshsense-reminder:${item.id}:${item.expiry_date}:${item.reminder_days_before}`;
+        try { if (localStorage.getItem(marker)) continue; } catch { /* Keep this session usable when browser storage is blocked. */ }
+        if (notified.current.has(marker)) continue;
+        notified.current.add(marker);
+        const body = remaining === 0 ? "Its package date is today. Check the label and your storage conditions." : `Its package date is in ${remaining} day${remaining === 1 ? "" : "s"}.`;
+        const sendNotification = async () => {
+          try {
+            if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
+              const registration = await navigator.serviceWorker.ready;
+              await registration.showNotification("FreshSense pantry reminder", { body: `${item.product_name}: ${body}`, icon: "/icons/icon-192.svg", data: { url: "/inventory" } });
+            } else {
+              const notification = new Notification("FreshSense pantry reminder", { body: `${item.product_name}: ${body}` });
+              notification.onclick = () => { window.focus(); window.location.assign("/inventory"); };
+            }
+            try { localStorage.setItem(marker, "sent"); } catch { /* In-memory de-duplication prevents repeat alerts this session. */ }
+          } catch { /* The in-app reminder list remains visible if OS alerts are blocked. */ }
+        };
+        void sendNotification();
+      }
+    };
+    check();
+    const timer = window.setInterval(check, 60_000);
+    window.addEventListener("focus", check);
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", check); };
+  }, [items]);
+
+  const enable = async () => {
+    if (!("Notification" in window)) { setPermission("unsupported"); return; }
+    try { setPermission(await Notification.requestPermission()); }
+    catch { setPermission("denied"); }
+  };
+
+  return (
+    <section className="mt-4 rounded-2xl border border-indigo-200 bg-indigo-50 p-4" aria-label="Expiry reminders">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="font-semibold text-indigo-950">Expiry reminders</h2>
+          <p className="mt-1 text-sm text-indigo-900">{due.length ? `${due.length} tracked batch${due.length === 1 ? "" : "es"} is inside its reminder window.` : "Choose a reminder window on any batch to add it here."}</p>
+          <p className="mt-1 text-xs text-indigo-800">Browser alerts are checked while FreshSense is open. The in-app date watch remains available any time.</p>
+        </div>
+        {permission === "granted" ? <span className="rounded-full bg-indigo-100 px-3 py-1.5 text-xs font-semibold text-indigo-900">Browser alerts enabled</span>
+          : permission === "unsupported" || permission === "denied" ? <span className="text-xs text-indigo-900">Browser alerts unavailable or blocked</span>
+            : <button type="button" onClick={enable} className="rounded-lg bg-indigo-900 px-3 py-2 text-sm font-semibold text-white">Enable browser alerts</button>}
+      </div>
+      {due.length > 0 && <ul className="mt-3 grid gap-2 sm:grid-cols-2">{due.map((item) => <li key={item.id} className="rounded-xl border border-indigo-100 bg-white p-3 text-sm"><span className="font-semibold text-slate-900">{item.product_name}</span><span className="ml-2 text-slate-600">{daysUntil(item.expiry_date!, today) === 0 ? "label date today" : `${daysUntil(item.expiry_date!, today)} days to label date`}</span></li>)}</ul>}
+    </section>
+  );
+}
+
 function InventoryRow({ item }: { item: InventoryItem }) {
   const [quantity, setQuantity] = useState(String(item.quantity));
   const [expiryDate, setExpiryDate] = useState(item.expiry_date ?? "");
+  const [category, setCategory] = useState(item.category ?? "");
+  const [storageNotes, setStorageNotes] = useState(item.storage_notes ?? "");
+  const [openedDate, setOpenedDate] = useState(item.opened_date ?? "");
   const update = useUpdateInventoryItem();
   const remove = useDeleteInventoryItem();
   const [feedback, setFeedback] = useState("");
@@ -81,6 +157,31 @@ function InventoryRow({ item }: { item: InventoryItem }) {
           <button type="button" onClick={() => { if (window.confirm(`Remove ${item.product_name} from your inventory?`)) remove.mutate(item.id); }} className="rounded-lg px-2 py-2 text-xs font-medium text-slate-500 hover:bg-rose-50 hover:text-rose-700" aria-label={`Remove ${item.product_name}`}>Remove</button>
         </div>
       </div>
+      <details className="mt-3 rounded-xl border border-slate-200 bg-slate-50">
+        <summary className="cursor-pointer px-3 py-2.5 text-sm font-semibold text-slate-700">Storage context & reminders</summary>
+        <div className="grid gap-3 border-t border-slate-200 p-3 sm:grid-cols-2">
+          <label className="block text-xs font-medium text-slate-600">Product category
+            <input value={category} onChange={(e) => setCategory(e.target.value)} onBlur={() => { if (category !== (item.category ?? "")) update.mutate({ id: item.id, category: category.trim() || null }, { onSuccess: () => setFeedback("Product category saved."), onError: () => setFeedback("Category could not be saved.") }); }} maxLength={80} placeholder="e.g. Dairy, canned food" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
+          </label>
+          <label className="block text-xs font-medium text-slate-600">Stored in
+            <select value={item.storage_location} onChange={(e) => update.mutate({ id: item.id, storage_location: e.target.value as NonNullable<InventoryItem["storage_location"]> }, { onSuccess: () => setFeedback("Storage location saved."), onError: () => setFeedback("Storage details could not be saved.") })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900">
+              <option value="unknown">Not recorded</option><option value="pantry">Pantry</option><option value="refrigerator">Refrigerator</option><option value="freezer">Freezer</option><option value="room_temperature">Room temperature</option><option value="other">Other</option>
+            </select>
+          </label>
+          <label className="block text-xs font-medium text-slate-600">Opened on
+            <input type="date" value={openedDate} onChange={(e) => setOpenedDate(e.target.value)} onBlur={() => { if (openedDate !== (item.opened_date ?? "")) update.mutate({ id: item.id, opened_date: openedDate || null }, { onSuccess: () => setFeedback("Opened date saved."), onError: () => setFeedback("Opened date could not be saved.") }); }} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
+          </label>
+          <label className="block text-xs font-medium text-slate-600">Remind me
+            <select disabled={!item.expiry_date} value={item.reminder_days_before ?? "none"} onChange={(e) => update.mutate({ id: item.id, reminder_days_before: e.target.value === "none" ? null : Number(e.target.value) as 1 | 3 | 7 }, { onSuccess: () => setFeedback("Reminder preference saved."), onError: () => setFeedback("Reminder could not be saved.") })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 disabled:bg-slate-100">
+              <option value="none">No reminder</option><option value={7}>7 days before</option><option value={3}>3 days before</option><option value={1}>1 day before</option>
+            </select>
+            {!item.expiry_date && <span className="mt-1 block font-normal text-slate-500">Add a package date to enable reminders.</span>}
+          </label>
+          <label className="block text-xs font-medium text-slate-600 sm:col-span-2">Storage or opening notes
+            <textarea value={storageNotes} onChange={(e) => setStorageNotes(e.target.value)} onBlur={() => { if (storageNotes !== (item.storage_notes ?? "")) update.mutate({ id: item.id, storage_notes: storageNotes || null }, { onSuccess: () => setFeedback("Storage notes saved."), onError: () => setFeedback("Storage notes could not be saved.") }); }} maxLength={500} rows={2} placeholder="e.g. Opened Monday; kept on the middle fridge shelf" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
+          </label>
+        </div>
+      </details>
       {feedback && <p role="status" className={`mt-2 text-xs ${feedback.includes("could not") ? "text-rose-700" : "text-emerald-800"}`}>{feedback}</p>}
       {(update.isError || remove.isError) && <p role="alert" className="mt-2 text-xs text-rose-700">Could not save that change. Please retry.</p>}
     </li>
@@ -169,6 +270,8 @@ export default function Inventory() {
             </div>
           </div>
         </section>
+
+        <InventoryReminders items={items} />
 
         <details className="mt-4 rounded-2xl border border-slate-200 bg-white shadow-sm">
           <summary className="cursor-pointer list-none px-4 py-4 font-semibold text-slate-800 marker:content-none">+ Add a batch manually</summary>

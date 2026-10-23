@@ -1,45 +1,40 @@
-# PROJECT_STATUS — FreshSense AI (Phase-1 60% milestone)
+# FreshSense AI — current prototype status
 
-| Component | Status | Completion |
-|---|---|---:|
-| Project architecture | Done | 100% |
-| React/Vite + TS + Tailwind | Done | 100% |
-| PWA (manifest + SW + offline shell + installability) | Done | 100% |
-| Backend (FastAPI layered) | Done | 80% |
-| Database (SQLAlchemy models + dev create_all + Alembic scaffold) | Done | 80% |
-| Authentication (JWT register/login/me) | Done | 80% |
-| Image pipeline (validation + upload/capture flow) | Done | 80% |
-| OCR (real date parser + provider interface; engine optional) | Done | 70% |
-| Vision model | Prototype (`vision-v0.1-prototype`, labeled `prototype`) | 60% |
-| Sensor API + abstraction | Foundation | 50% |
-| Hardware (ESP32/MQ/DHT22) | Phase 2 | 10% |
-| Multimodal fusion | Foundation (interface + deterministic engine) | 30% |
-| Shelf-life prediction | Phase 2 (`MODEL TRAINING REQUIRED`) | 10% |
-| Explainability (Grad-CAM-ready interface) | Foundation | 25% |
-| Testing (25 pytest + 4 vitest) | In progress | 60% |
-| Documentation (README/ARCH/API/DEV/PHASES) | In progress | 70% |
+FreshSense is a working student-demo application for package reading, scan evidence, and household batch tracking. It is not a certified food-safety system, and model estimates are not calibrated probabilities.
 
-## Phase 1 — COMPLETED (foundation + core workflow + multimodal interfaces)
+## Implemented workflow
 
-Implemented:
-- Backend: FastAPI `/api/v1` (auth, scans, vision, ocr, sensors, assessments, health), PostgreSQL, JWT, upload validation (ext+MIME+10MB+PIL), vision prototype, OCR date parser, sensor providers, fusion/decision services, full test suite
-- Frontend: PWA (manifest, SW autoUpdate, offline.html, icons), Landing/Login/Register/Dashboard/Scan/Result/History, camera+upload ScanForm, TanStack Query + axios JWT, mobile bottom nav
-- Infra: local environment examples, data/ layout + metadata schema, ml/evaluation scaffold, docs
+- Account sign-in and user-scoped scan history.
+- Mobile camera/upload scanning with image framing and retake guidance.
+- Package OCR/date parsing and product-category recognition with visible evidence and source.
+- User review for dates and categories when recognition is incomplete or needs correction.
+- Freshness Passport evidence, limitations, conflicts, and repeat-scan timeline.
+- Pantry batches with quantity, package-date provenance, storage location, opened date, notes, and optional reminder window.
+- Date watch, explainable use-next sorting, in-app reminder queue, and opt-in browser alerts while FreshSense is open.
+- SQLite local-demo startup and Alembic migrations for PostgreSQL.
+- Free-port-aware PC/phone launcher and a presentation checklist.
+- Local package-label manifest template and held-out category/date evaluation script.
 
-Tests Run:
-- `python -m pytest tests -q` → 25 passed
-- `python -c from app.main import app` → import OK
-- Uvicorn startup → `Application startup complete` PASS
-- TestClient: `GET /api/v1/health` → `{status:ok}` PASS; `GET /docs` → 200 PASS; `POST /api/v1/auth/register` → 201 PASS
-- Frontend (subagent): `npm run build` → PASS (PWA sw.js + precache); `npm test -- --run` → 4/4 PASS
+## Verification in the latest implementation pass
 
-Build: PASS · Backend: PASS · Frontend: PASS · Database: PASS · PWA: PASS · Integration: PASS (register→scan→assessment→history path covered by tests + TestClient)
+- Frontend TypeScript check: passed.
+- Frontend production/PWA build: passed.
+- Frontend UI tests: 4 passed.
+- Backend Python syntax compilation: passed.
+- Package-label evaluation CLI help/import: passed.
+- Backend integration tests and live database migrations: not run in this pass; the available environment did not include the backend runtime dependencies or a configured test database.
+- Phone hardware smoke test: documented, but not performed on a physical phone in this pass.
 
-Known Issues:
-- Vision is heuristic prototype, NOT a trained model (honestly labeled; MobileNetV3 training = Phase 2)
-- OCR engine optional (EasyOCR/Paddle not in requirements); parser real, engine returns honest no-date when absent
-- Learned fusion + shelf-life regression + hardware calibration = Phase-2 stubs (`not_implemented` / `MODEL TRAINING REQUIRED`)
-- Minor upstream deprecation warnings only (utcnow, PIL getdata, httpx testclient)
+## Known research and runtime limits
 
-Next Phase (Phase 2 research):
-- Day0→DayN aging dataset, sensor calibration, trained lightweight model, learned + ablated fusion, shelf-life regression, Grad-CAM, ONNX/TFLite edge quant, full benchmarking
+- Vision output remains a prototype and is not validated for safety decisions.
+- Tesseract must be installed on the backend computer for local OCR; neural OCR is optional.
+- No package-label validation benchmark has been collected. Use the local manifest and evaluation workflow before reporting accuracy.
+- The existing produce image candidate scored 52.6% on its limited held-out dataset and remains inactive; see `data/README.md` and `NOVELTY.md`.
+- Browser reminders are checked while the app is open. They are not delivered while the browser/app is closed.
+- Temperature, humidity, and VOC demo values are illustrative unless entered from an actual calibrated sensor.
+- No learned multimodal fusion, shelf-life regression, or calibrated ESP32 hardware model is currently implemented.
+
+## Next research phase
+
+Collect permissioned, varied package photos and controlled repeated observations; keep package/item groups separated across training and evaluation; calibrate sensors; evaluate OCR, category, and fusion performance on untouched groups; then consider a trained lightweight model and background notification infrastructure.

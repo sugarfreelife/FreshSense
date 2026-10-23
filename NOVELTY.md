@@ -2,18 +2,22 @@
 
 ## Implemented product contribution
 
-FreshSense now supports a **Longitudinal Freshness Passport**. A user can name a
-food item, attach later scans to that same item, and inspect the chronological
-record of appearance estimates, package dates, storage context, warnings, and
-which modalities contributed to each scan. Individual scan Passports retain
-their evidence, missing inputs, conflicts, model identity, and limitations.
+FreshSense supports a **Longitudinal Freshness Passport** and a separate
+batch-level pantry ledger. A user can name a food item, attach later scans to
+that same item, and inspect the chronological record of appearance estimates,
+package dates, storage context, warnings, and which modalities contributed to
+each scan. Purchase batches keep their own quantity and date provenance;
+uncertain OCR dates require user confirmation or correction. Each batch can
+record its opened date, storage location, notes, and reminder preference.
+Individual scan Passports retain evidence, missing inputs, conflicts, model
+identity, and limitations.
 
-The feature makes freshness assessment a traceable record across time instead
-of a sequence of disconnected scores. It also supports paired observations:
-repeat photos can be associated with temperature, humidity, VOC readings, and
-expiry evidence for the same tracked item. The current interface reports what
-was captured and how the rule-based output changed; it does not calculate a
-validated deterioration rate or claim a food-safety determination.
+Together, the Passport and batch ledger connect repeated observations with
+household actions: confirm an unreadable date, track quantity by purchase,
+record storage context, and see why a batch is in the reminder queue. The
+“use next” cue is an explainable date sort, not a trained recommendation
+model. The system does not calculate a validated deterioration rate or claim
+a food-safety determination.
 
 This is an implemented product contribution and a **research hypothesis**, not
 a claim of scientific priority or proven accuracy. A related-work review is
@@ -67,4 +71,8 @@ physical paired observations are required for reliable performance claims.
 See `data/PAIRED_COLLECTION_PROTOCOL.md`,
 `data/metadata/paired_collection_template.csv`, and
 `backend/scripts/validate_paired_manifest.py` for the current collection and
-validation workflow.
+validation workflow. Package label photos use
+`data/metadata/package_label_template.csv` and
+`backend/scripts/evaluate_package_labels.py` for held-out category and expiry
+metrics. No package-label benchmark has been collected yet, so the evaluation
+script is ready but no package accuracy claim is available.

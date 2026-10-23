@@ -15,6 +15,8 @@ from app.seed_demo import seed_demo_users
 if settings.sqlalchemy_url.startswith("sqlite:"):
     Base.metadata.create_all(bind=engine)
     ocr_columns = {column["name"] for column in inspect(engine).get_columns("ocr_results")}
+    sensor_columns = {column["name"] for column in inspect(engine).get_columns("sensor_readings")}
+    inventory_columns = {column["name"] for column in inspect(engine).get_columns("inventory_items")}
     with engine.begin() as connection:
         if "provider" not in ocr_columns:
             connection.execute(
@@ -26,11 +28,18 @@ if settings.sqlalchemy_url.startswith("sqlite:"):
             connection.execute(text("ALTER TABLE ocr_results ADD COLUMN expiry_label VARCHAR(50)"))
         if "expiry_text" not in ocr_columns:
             connection.execute(text("ALTER TABLE ocr_results ADD COLUMN expiry_text VARCHAR(50)"))
-        sensor_columns = {column["name"] for column in inspect(engine).get_columns("sensor_readings")}
         if "source" not in sensor_columns:
             connection.execute(
                 text("ALTER TABLE sensor_readings ADD COLUMN source VARCHAR(30) NOT NULL DEFAULT 'legacy'")
             )
+        if "reminder_days_before" not in inventory_columns:
+            connection.execute(text("ALTER TABLE inventory_items ADD COLUMN reminder_days_before INTEGER"))
+        if "storage_location" not in inventory_columns:
+            connection.execute(text("ALTER TABLE inventory_items ADD COLUMN storage_location VARCHAR(40) NOT NULL DEFAULT 'unknown'"))
+        if "opened_date" not in inventory_columns:
+            connection.execute(text("ALTER TABLE inventory_items ADD COLUMN opened_date DATE"))
+        if "storage_notes" not in inventory_columns:
+            connection.execute(text("ALTER TABLE inventory_items ADD COLUMN storage_notes TEXT"))
     seed_demo_users()
 
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
