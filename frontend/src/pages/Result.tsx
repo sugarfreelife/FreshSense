@@ -5,6 +5,7 @@ import Layout from "../components/Layout";
 import ResultCard from "../components/ResultCard";
 import LoadingSkeleton from "../components/LoadingSkeleton";
 import { useToast } from "../components/Toast";
+import InventoryAddFromScan from "../components/InventoryAddFromScan";
 
 function reanalyzeFailureMessage(error: unknown): string {
   if (!axios.isAxiosError(error)) return "Could not reread the saved photo.";
@@ -46,12 +47,15 @@ export default function Result() {
             Could not load this scan. It may not exist or you may be offline.
           </p>
         ) : scanQuery.data ? (
-          <ResultCard
-            scan={scanQuery.data}
-            onReanalyze={readLabelAgain}
-            isReanalyzing={reanalyze.isPending}
-            reanalyzeError={reanalyze.error ? reanalyzeFailureMessage(reanalyze.error) : null}
-          />
+          <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
+            <ResultCard
+              scan={scanQuery.data}
+              onReanalyze={readLabelAgain}
+              isReanalyzing={reanalyze.isPending}
+              reanalyzeError={reanalyze.error ? reanalyzeFailureMessage(reanalyze.error) : null}
+            />
+            <InventoryAddFromScan scan={scanQuery.data} />
+          </div>
         ) : null}
       </div>
     </Layout>

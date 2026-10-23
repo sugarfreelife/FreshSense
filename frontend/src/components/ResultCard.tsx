@@ -25,6 +25,11 @@ function recommendationTone(recommendation?: string | null): string {
 }
 
 function recommendationLabel(recommendation?: string | null): string {
+  const normalized = recommendation?.toLowerCase() ?? "";
+  if (normalized.includes("do_not_consume") || normalized.includes("do not consume")) return "Do not consume";
+  if (normalized.includes("consume soon")) return "Consume soon";
+  if (normalized.includes("consume now")) return "Consume now";
+  if (normalized.includes("check expiry")) return "Check the expiry label";
   switch (recommendation) {
     case "CONSUME_NOW": return "Consume now";
     case "CONSUME_SOON": return "Consume soon";
@@ -141,10 +146,13 @@ export default function ResultCard({
             )}
           </div>
           {product?.evidence && product.evidence.length > 0 && (
-            <div className="flex flex-wrap gap-2" aria-label="Recognition evidence">
-              {product.evidence.map((term) => (
-                <span key={term} className="rounded-md bg-slate-100 px-2 py-1 font-mono text-xs text-slate-700">{term}</span>
-              ))}
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-900">AI evidence · package words</p>
+              <div className="mt-2 flex flex-wrap gap-2" aria-label="Recognition evidence">
+                {product.evidence.map((term) => (
+                  <span key={term} className="rounded-md border border-emerald-200 bg-white px-2 py-1 font-mono text-xs text-emerald-950">{term}</span>
+                ))}
+              </div>
             </div>
           )}
           {!productCategory && (
@@ -173,9 +181,36 @@ export default function ResultCard({
           {scan.ocr_text && (
             <details className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
               <summary className="cursor-pointer text-sm font-medium text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600">
-                View text read from the package
+                Inspect AI label readout
               </summary>
-              <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-slate-700">{scan.ocr_text}</pre>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <div className="rounded-lg bg-white p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Expiry cue</p>
+                  <p className="mt-1 font-mono text-sm font-semibold text-slate-900">
+                    {scan.expiry_label || scan.expiry_text
+                      ? [scan.expiry_label, scan.expiry_text].filter(Boolean).join(" · ")
+                      : "No expiry cue isolated"}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-600">
+                    {scan.expiry_date
+                      ? "A complete date was read from the package text."
+                      : scan.expiry_text
+                        ? "Partial stamp only. Check the printed package before relying on a date."
+                        : "The recognized text did not contain a usable expiry date."}
+                  </p>
+                </div>
+                <div className="rounded-lg bg-white p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Text reader</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">{ocrLabel(scan.ocr_provider)}</p>
+                  <p className="mt-1 text-xs text-slate-600">
+                    {scan.ocr_confidence != null
+                      ? `Reader score ${formatPct(scan.ocr_confidence)} · a text-recognition score, not date certainty.`
+                      : "This prototype does not yet report a calibrated OCR confidence."}
+                  </p>
+                </div>
+              </div>
+              <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Recognized package text</p>
+              <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-white p-3 font-mono text-xs leading-relaxed text-slate-700">{scan.ocr_text}</pre>
             </details>
           )}
         </div>
@@ -185,8 +220,11 @@ export default function ResultCard({
         <div className="rounded-xl border border-slate-200 bg-white p-3">
           <p className="text-xs uppercase tracking-wide text-slate-500">Printed expiry date</p>
           <p className="mt-1 text-sm font-semibold text-slate-800">
-              {scan.expiry_date ?? (scan.expiry_text ? `${scan.expiry_text} · year not read` : (["unavailable", "legacy", "unknown"].includes(scan.ocr_provider ?? "unknown") ? "OCR setup or refresh needed" : "Not detected"))}
+              {scan.expiry_date ?? (scan.expiry_text ? `${scan.expiry_text} · year not read` : "Not detected")}
           </p>
+          {!scan.expiry_date && !scan.expiry_text && ["unavailable", "legacy", "unknown"].includes(scan.ocr_provider ?? "unknown") && (
+            <p className="text-xs text-amber-800">OCR setup or refresh needed</p>
+          )}
             {scan.expiry_text && !scan.expiry_date && (
               <p className="text-xs text-slate-500">Partial stamp read{scan.expiry_label ? ` after “${scan.expiry_label}”` : ""}; no year was detected, so this was not used to calculate expiry.</p>
             )}

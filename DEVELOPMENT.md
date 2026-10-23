@@ -4,4 +4,5 @@
 - DB: PostgreSQL is the application database. Set `DATABASE_URL` in `backend/.env` and ensure the database/user exist before running `alembic upgrade head`. The API does not create or migrate tables on startup; Alembic owns schema changes.
 - Existing DB: if it already has the exact initial schema created by an earlier app startup, run `alembic stamp head` once instead of `alembic upgrade head`; back up and reconcile any other existing schema before migrating.
 - PWA: `npm run build` generates `sw.js`; test installability in Chrome desktop/Android; offline shows cached shell + "Connection required for AI analysis".
+- Pantry inventory: apply Alembic revision `20261023_0007` to an existing PostgreSQL database with `alembic upgrade head`; local SQLite demo startup creates the new inventory table automatically. Each record represents one purchase batch and is scoped to its owner.
 - Tests: backend tests use a dedicated PostgreSQL database named `freshsense_test`, reset between tests; frontend tests use Vitest with `npm test -- --run`.

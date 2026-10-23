@@ -55,7 +55,13 @@ def demo_status():
     if not settings.sqlalchemy_url.startswith("sqlite:"):
         return {"mode": "configured"}
     tables = set(inspect(engine).get_table_names())
-    return {"mode": "local-demo", "ready": "users" in tables and "tracked_items" in tables}
+    required_tables = {"users", "tracked_items", "inventory_items"}
+    missing_tables = sorted(required_tables - tables)
+    return {
+        "mode": "local-demo",
+        "ready": not missing_tables,
+        "missing_tables": missing_tables,
+    }
 
 
 @app.get("/")

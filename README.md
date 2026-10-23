@@ -48,7 +48,9 @@ These shared credentials are for local demos only. The ignored `backend/.env` fi
 If the application database already has the exact initial schema created by an older app startup, run `alembic stamp head` once instead of `alembic upgrade head`. For any other existing schema, back it up and reconcile it before applying migrations.
 
 ## Flow
-PWA → register/login → scan (camera/upload + optional context) → vision/OCR/decision → Freshness Passport → optionally link scans to a named item → review its longitudinal evidence timeline.
+PWA → register/login → scan (camera/upload + optional context) → vision/OCR/decision → Freshness Passport → confirm or enter the package date → record the purchased quantity as a pantry batch → follow the date watch and scan history.
+
+The Pantry keeps each purchase batch separate, so the same product can have a different quantity and label date on each purchase. If OCR does not produce a date, stock intake asks the user to read and enter the package date or explicitly save the batch without one. The pantry's “use next” cue sorts recorded dates and explains its recommendation; it is an organizing aid, not a food-safety verdict. Inventory is private to the signed-in user.
 
 Scans are paginated (20 per request by default). Uploaded photos are returned through an authenticated, non-cacheable endpoint rather than public static hosting. Apply the new Alembic migration before starting an existing database.
 

@@ -168,6 +168,32 @@ const TrackedItemDetailSchema = z.object({
   scans: ScanListSchema
 });
 
+export const InventoryItemSchema = z.object({
+  id: z.string(),
+  product_name: z.string(),
+  category: z.string().nullable(),
+  quantity: z.number(),
+  expiry_date: z.string().nullable(),
+  expiry_source: z.enum(["ocr_confirmed", "user_entered", "unknown"]),
+  days_remaining: z.number().nullable(),
+  status: z.enum(["expired", "urgent", "soon", "stored", "unknown"]),
+  source_scan_id: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string()
+});
+export type InventoryItem = z.infer<typeof InventoryItemSchema>;
+
+export interface CreateInventoryInput {
+  product_name: string;
+  category?: string;
+  quantity: number;
+  expiry_date?: string;
+  expiry_source: "ocr_confirmed" | "user_entered" | "unknown";
+  source_scan_id?: string;
+}
+
+export type UpdateInventoryInput = Partial<Pick<CreateInventoryInput, "product_name" | "category" | "quantity" | "expiry_source">> & { expiry_date?: string | null };
+
 /* ---------- Queries ---------- */
 
 export function useMe(): UseQueryResult<User | null, Error> {
@@ -235,6 +261,51 @@ export function useTrackedItem(id: string | undefined) {
       return TrackedItemDetailSchema.parse(res.data);
     },
     enabled: Boolean(id)
+  });
+}
+
+export function useInventory() {
+  return useQuery({
+    queryKey: ["inventory"],
+    queryFn: async () => {
+      const res = await apiClient.get("/inventory");
+      return z.array(InventoryItemSchema).parse(res.data);
+    }
+  });
+}
+
+export function useCreateInventoryItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CreateInventoryInput) => {
+      const res = await apiClient.post("/inventory", input);
+      return InventoryItemSchema.parse(res.data);
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["inventory"] });
+      void qc.invalidateQueries({ queryKey: ["scans"] });
+    }
+  });
+}
+
+export function useUpdateInventoryItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...input }: UpdateInventoryInput & { id: string }) => {
+      const res = await apiClient.patch(`/inventory/${id}`, input);
+      return InventoryItemSchema.parse(res.data);
+    },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["inventory"] })
+  });
+}
+
+export function useDeleteInventoryItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await apiClient.delete(`/inventory/${id}`);
+    },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["inventory"] })
   });
 }
 

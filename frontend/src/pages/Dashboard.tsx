@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { useScans } from "../api/hooks";
+import { useInventory, useScans } from "../api/hooks";
 import Layout from "../components/Layout";
 import LoadingSkeleton from "../components/LoadingSkeleton";
 import EmptyState from "../components/EmptyState";
@@ -22,6 +22,11 @@ function needsAttention(label: string): boolean {
 
 export default function Dashboard() {
   const scansQuery = useScans();
+  const inventoryQuery = useInventory();
+  const pantryItems = inventoryQuery.data ?? [];
+  const nextAction = pantryItems.find((item) => item.status === "unknown")?.product_name
+    ?? pantryItems.find((item) => ["expired", "urgent", "soon"].includes(item.status))?.product_name
+    ?? (pantryItems.length ? "Dates look clear" : "Scan your first food");
 
   const scans = scansQuery.data?.pages.flatMap((page) => page.items) ?? [];
   const total = scansQuery.data?.pages[0]?.total ?? 0;
@@ -31,15 +36,37 @@ export default function Dashboard() {
 
   return (
     <Layout>
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl bg-slate-950 px-5 py-6 text-white shadow-lg sm:px-7">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-300">FreshSense / Food intelligence</p>
+          <h1 className="mt-2 text-2xl font-bold sm:text-3xl">Your freshness command center</h1>
+          <p className="mt-1 text-sm text-slate-300">Scans, package dates, and pantry batches in one place.</p>
+        </div>
         <Link
           to="/scan"
           className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700"
         >
-          + New scan
+          + Scan a purchase
         </Link>
       </div>
+
+      <section className="mt-4 grid gap-3 sm:grid-cols-3" aria-label="Pantry overview">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Pantry units</p>
+          <p className="mt-1 text-3xl font-bold tabular-nums text-slate-950">{inventoryQuery.isError ? "—" : inventoryQuery.isPending ? "…" : pantryItems.reduce((sum, item) => sum + item.quantity, 0)}</p>
+          <p className="mt-1 text-xs text-slate-500">Across {inventoryQuery.isPending ? "…" : pantryItems.length} purchase batches</p>
+        </div>
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-amber-900">Date watch</p>
+          <p className="mt-1 text-3xl font-bold tabular-nums text-amber-950">{inventoryQuery.isError ? "—" : inventoryQuery.isPending ? "…" : pantryItems.filter((item) => ["expired", "urgent", "soon"].includes(item.status)).length}</p>
+          <p className="mt-1 text-xs text-amber-900">Batches within seven days or past label date</p>
+        </div>
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-900">Next action</p>
+          <p className="mt-1 text-sm font-semibold text-emerald-950">{inventoryQuery.isPending ? "Loading pantry…" : nextAction}</p>
+          <Link to="/inventory" className="mt-2 inline-block text-sm font-semibold text-emerald-800 underline">Open batch tracker</Link>
+        </div>
+      </section>
 
       {scansQuery.isPending ? (
         <div className="mt-4">

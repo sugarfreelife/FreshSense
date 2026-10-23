@@ -8,6 +8,10 @@ const root = dirname(fileURLToPath(import.meta.url));
 const backend = join(root, "backend");
 const frontend = join(root, "frontend");
 const windows = process.platform === "win32";
+const phoneMode = process.argv.includes("--phone");
+const phoneHostIndex = process.argv.indexOf("--phone-host");
+const phoneHostArg = phoneHostIndex >= 0 ? process.argv[phoneHostIndex + 1] : undefined;
+const bindHost = phoneMode ? (phoneHostArg || await getPrivateIPv4()) : "127.0.0.1";
 const pythonVenv = join(
   backend,
   ".venv",
@@ -55,11 +59,12 @@ function stop(signal = "SIGTERM", exitCode = 0) {
   process.exitCode = exitCode;
 }
 
-function launch(command, args, cwd, name, shell = false) {
+function launch(command, args, cwd, name, shell = false, env = process.env) {
   const child = spawn(command, args, {
     cwd,
     stdio: "inherit",
     shell,
+    env,
     detached: !windows,
     windowsHide: false,
   });
@@ -80,9 +85,51 @@ function launch(command, args, cwd, name, shell = false) {
 process.on("SIGINT", () => stop("SIGINT", 130));
 process.on("SIGTERM", () => stop("SIGTERM", 143));
 
-console.log("Backend:  http://127.0.0.1:8000  (API docs: /docs)");
-console.log("Frontend: http://127.0.0.1:5173");
+if (phoneMode) {
+  console.log(`Backend:  http://${bindHost}:8000  (API docs: /docs)`);
+  console.log(`Frontend: http://${bindHost}:5173`);
+  console.log(`Phone:    http://${bindHost}:5173 (connect phone and PC to the same Wi-Fi)`);
+  console.log("Camera capture: open the app, sign in, then tap Take photo on the scan page.");
+} else {
+  console.log("Backend:  http://127.0.0.1:8000  (API docs: /docs)");
+  console.log("Frontend: http://127.0.0.1:5173");
+}
 console.log("Press Ctrl+C to stop both services.");
 
-launch(python, ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000"], backend, "Backend");
-launch("npm", ["run", "dev", "--", "--host", "127.0.0.1"], frontend, "Frontend", windows);
+const frontendEnv = phoneMode
+  ? { ...process.env, VITE_API_URL: `http://${bindHost}:8000/api/v1` }
+  : process.env;
+const backendEnv = phoneMode
+  ? {
+      ...process.env,
+      CORS_ORIGINS: [
+        "http://localhost:5173", "http://127.0.0.1:5173",
+        "http://localhost:5174", "http://127.0.0.1:5174",
+        `http://${bindHost}:5173`, `http://${bindHost}:5174`,
+      ].join(","),
+    }
+  : process.env;
+
+launch(python, ["-m", "uvicorn", "app.main:app", "--host", bindHost, "--port", "8000"], backend, "Backend", false, backendEnv);
+launch("npm", ["run", "dev", "--", "--host", bindHost], frontend, "Frontend", windows, frontendEnv);
+
+async function getPrivateIPv4() {
+  if (process.platform === "win32") {
+    const { execFileSync } = await import("node:child_process");
+    const output = execFileSync("ipconfig.exe", [], { encoding: "utf8" });
+    const preferredAdapter = output.split(/\r?\n(?=[^\r\n].*adapter )/i);
+    const addressFrom = (block) => {
+      const ip = block.match(/IPv4[^:]*:\s*([0-9.]+)/i)?.[1];
+      const gateway = block.match(/Default Gateway[^:]*:\s*([0-9.]+)/i)?.[1];
+      return ip && gateway && gateway !== "0.0.0.0" && /^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(ip) ? ip : null;
+    };
+    const address = preferredAdapter.map(addressFrom).find(Boolean);
+    if (address) return address;
+    throw new Error("Could not detect the private Wi-Fi address automatically. Run `ipconfig` in Command Prompt and use the IPv4 address with --phone-host, for example: node start-dev.mjs --phone --phone-host 192.168.1.23");
+  }
+  const { networkInterfaces } = await import("node:os");
+  const entries = Object.values(networkInterfaces()).flat().filter(Boolean);
+  const address = entries.find((item) => item.family === "IPv4" && !item.internal && /^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(item.address));
+  if (!address) throw new Error("No private Wi-Fi/LAN IPv4 address found. Connect this PC to Wi-Fi and retry.");
+  return address.address;
+}

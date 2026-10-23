@@ -11,7 +11,7 @@ export default function BottomNav() {
       aria-label="Primary"
       className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur"
     >
-      <div className="mx-auto flex max-w-md items-stretch justify-between px-2 pb-[env(safe-area-inset-bottom)]">
+      <div className="mx-auto flex max-w-5xl items-stretch justify-between px-2 pb-[env(safe-area-inset-bottom)]">
         <NavLink to="/dashboard" className={linkClass} aria-label="Dashboard">
           <span aria-hidden="true" className="text-lg leading-none">⌂</span>
           Home
@@ -19,6 +19,10 @@ export default function BottomNav() {
         <NavLink to="/scan" className={linkClass} aria-label="Start scan">
           <span aria-hidden="true" className="text-lg leading-none">◉</span>
           Scan
+        </NavLink>
+        <NavLink to="/inventory" className={linkClass} aria-label="Pantry inventory">
+          <span aria-hidden="true" className="text-lg leading-none">▦</span>
+          Pantry
         </NavLink>
         <NavLink to="/history" className={linkClass} aria-label="Scan history">
           <span aria-hidden="true" className="text-lg leading-none">≡</span>

@@ -38,7 +38,7 @@ export default function Layout({
     <div className="flex min-h-dvh flex-col bg-slate-50">
       <OfflineBanner />
       <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex w-full max-w-md items-center justify-between px-4 py-3">
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-3">
           <Link to="/" className="flex items-center gap-2" aria-label="FreshSense AI home">
             <img src="/icons/icon-192.svg" alt="" className="h-7 w-7" />
             <span className="text-base font-bold text-green-700">FreshSense AI</span>
@@ -52,7 +52,7 @@ export default function Layout({
           </button>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-md flex-1 px-4 pb-24 pt-4">{children}</main>
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-24 pt-4">{children}</main>
       {!hideNav && <BottomNav />}
     </div>
   );

@@ -8,6 +8,7 @@ import Scan from "./pages/Scan";
 import Result from "./pages/Result";
 import History from "./pages/History";
 import TrackedItemPage from "./pages/TrackedItem";
+import Inventory from "./pages/Inventory";
 
 export default function App() {
   return (
@@ -44,6 +45,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <History />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/inventory"
+        element={
+          <ProtectedRoute>
+            <Inventory />
           </ProtectedRoute>
         }
       />

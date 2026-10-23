@@ -14,6 +14,7 @@ from sqlalchemy import create_engine
 from app.core.config import settings
 from app.models import Base
 import app.models.scan  # noqa: F401
+import app.models.inventory  # noqa: F401
 import app.models.user  # noqa: F401
 
 config = context.config
