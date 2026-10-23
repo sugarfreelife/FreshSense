@@ -101,7 +101,7 @@ def update_inventory_item(
         raise HTTPException(status_code=404, detail="Inventory item not found")
     changes = payload.model_dump(exclude_unset=True)
     if changes.get("expiry_source") is None:
-        changes.pop("expiry_source")
+        changes.pop("expiry_source", None)
     if "product_name" in changes and changes["product_name"] is not None:
         changes["product_name"] = changes["product_name"].strip()
         if not changes["product_name"]:
