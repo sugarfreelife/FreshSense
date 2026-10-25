@@ -8,6 +8,7 @@ passlib[bcrypt]
 bcrypt==4.0.1
 python-multipart
 pillow>=11.3
+pillow-heif>=0.18.0
 pytesseract>=0.3.13
 python-dateutil>=2.9
 easyocr>=1.7.2

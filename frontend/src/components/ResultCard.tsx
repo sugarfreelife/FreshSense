@@ -79,14 +79,24 @@ export default function ResultCard({
   const label = scan.freshness_label ?? scan.freshness ?? "Unknown";
   const sources = scan.sources ?? [];
   const warnings = scan.warnings ?? [];
+  const isHeuristicScore = scan.confidence_kind === "heuristic_score";
   const scoreLabel = scan.model_score == null
     ? "Assessment score"
-    : scan.confidence_kind === "heuristic_score"
-      ? "Prototype score"
+    : isHeuristicScore
+      ? "Prototype rule score"
       : "Uncalibrated model score";
+  const scoreValue = scan.model_score == null
+    ? formatPct(scan.confidence)
+    : isHeuristicScore
+      ? scan.model_score.toFixed(2)
+      : formatPct(scan.model_score);
   const product = scan.product;
   const productCategory = product?.category ?? null;
   const productFromImage = product?.source === "package_text";
+  const nextAction = scan.passport?.next_action;
+  const nextActionTo = nextAction?.target === "pantry"
+    ? "#pantry-entry"
+    : `/scan${scan.tracked_item_id ? `?item=${encodeURIComponent(scan.tracked_item_id)}` : ""}`;
 
   return (
     <article aria-label="Scan result" className="space-y-4">
@@ -99,9 +109,12 @@ export default function ResultCard({
           </span>
           <span className="text-sm text-slate-600">
             {scoreLabel}{" "}
-            <strong>{formatPct(scan.model_score ?? scan.confidence)}</strong>
+            <strong>{scoreValue}</strong>
           </span>
         </div>
+        {isHeuristicScore && (
+          <p className="mt-1 text-right text-xs text-slate-500">Fixed rule output · not accuracy or a probability</p>
+        )}
         {scan.tracked_item_id && scan.tracked_item_label && (
           <Link to={`/items/${scan.tracked_item_id}`} className="mt-2 inline-block text-sm font-semibold text-green-700 underline">
             View {scan.tracked_item_label} over time
@@ -283,6 +296,21 @@ export default function ResultCard({
           <h3 className="text-base font-semibold text-slate-900">Freshness Passport</h3>
           <p className="mt-1 text-sm font-medium text-emerald-800">{scan.passport.summary}</p>
           <p className="mt-2 text-sm text-slate-600">{scan.passport.explanation}</p>
+
+          {nextAction && (
+            <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-800">Evidence recovery loop · rule-based</p>
+              <h4 className="mt-1 text-sm font-bold text-slate-900">{nextAction.title}</h4>
+              <p className="mt-1 text-sm text-slate-700">{nextAction.detail}</p>
+              <Link
+                to={nextActionTo}
+                className="mt-3 inline-flex rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-800 transition-colors hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 focus-visible:ring-offset-2"
+              >
+                {nextAction.action_label}
+              </Link>
+              <p className="mt-2 text-xs text-slate-600">This follow-up rule helps complete the record; it is not a trained freshness prediction.</p>
+            </div>
+          )}
 
           {scan.passport.conflicts.length > 0 && (
             <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3" role="status">

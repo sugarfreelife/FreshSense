@@ -47,13 +47,29 @@ const PassportConflictSchema = z.object({
   detail: z.string()
 });
 
+const PassportNextActionSchema = z.object({
+  key: z.enum([
+    "resolve_conflict",
+    "confirm_date",
+    "identify_product",
+    "replace_demo_values",
+    "repeat_observation",
+    "review_result"
+  ]),
+  title: z.string(),
+  detail: z.string(),
+  action_label: z.string(),
+  target: z.enum(["pantry", "scan"])
+});
+
 const PassportSchema = z.object({
   summary: z.string(),
   explanation: z.string(),
   evidence: z.array(PassportEvidenceSchema),
   timeline: z.array(PassportEventSchema),
   conflicts: z.array(PassportConflictSchema).optional().default([]),
-  limitations: z.array(z.string())
+  limitations: z.array(z.string()),
+  next_action: PassportNextActionSchema.optional()
 });
 
 const NestedScanSchema = z.object({

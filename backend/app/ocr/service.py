@@ -3,10 +3,12 @@
 from pathlib import Path
 import re
 import shutil
+from threading import Lock
 
 from app.ocr.date_parser import extract_expiry_date
 
 _easy_reader = None
+_easy_reader_lock = Lock()
 
 
 def _tesseract_command() -> str | None:
@@ -29,34 +31,50 @@ def _read_tesseract(image_path: str, command: str) -> tuple[str, float | None]:
     pytesseract.pytesseract.tesseract_cmd = command
     with Image.open(image_path) as source:
         gray = ImageOps.grayscale(source)
-        gray.thumbnail((2200, 2200))
+        gray.thumbnail((1800, 1800))
+        quick = ImageOps.autocontrast(gray)
+
+        def read_candidate(image, page_mode: int) -> tuple[str, float | None]:
+            data = pytesseract.image_to_data(
+                image,
+                lang="eng",
+                config=f"--oem 3 --psm {page_mode}",
+                output_type=pytesseract.Output.DICT,
+            )
+            lines: dict[tuple[str, str, str], list[str]] = {}
+            scores = []
+            for index, raw_word in enumerate(data["text"]):
+                word = str(raw_word).strip()
+                if not word:
+                    continue
+                key = (data["block_num"][index], data["par_num"][index], data["line_num"][index])
+                lines.setdefault(key, []).append(word)
+                score = float(data["conf"][index])
+                if score >= 0:
+                    scores.append(score)
+            text = "\n".join(" ".join(words) for words in lines.values()).strip()
+            confidence = sum(scores) / len(scores) / 100 if scores else None
+            return text, confidence
+
+        quick_text, quick_confidence = read_candidate(quick, 6)
+        quick_parse = extract_expiry_date(quick_text)
+        # Most clear package labels are solved in one OCR pass. Keep the heavier
+        # multi-view retry for small, angled, or low-contrast stamps.
+        if quick_parse["date_detected"] and (quick_confidence or 0) >= 0.72 and len(quick_text) >= 18:
+            return quick_text, quick_confidence
+
         enlarged = gray.resize((gray.width * 2, gray.height * 2))
         variants = (
-            ImageOps.autocontrast(gray),
             ImageEnhance.Sharpness(ImageEnhance.Contrast(enlarged).enhance(1.8)).enhance(2.0),
             ImageOps.autocontrast(enlarged).point(lambda pixel: 255 if pixel > 165 else 0),
         )
 
-        candidates: list[tuple[tuple[int, int, float], str, float | None]] = []
+        candidates: list[tuple[tuple[int, int, float], str, float | None]] = [
+            ((int(quick_parse["date_detected"]), len(quick_text), quick_confidence or 0), quick_text, quick_confidence)
+        ]
         for image in variants:
             for page_mode in (6, 11):
-                config = f"--oem 3 --psm {page_mode}"
-                data = pytesseract.image_to_data(
-                    image, lang="eng", config=config, output_type=pytesseract.Output.DICT
-                )
-                lines: dict[tuple[str, str, str], list[str]] = {}
-                scores = []
-                for index, word in enumerate(data["text"]):
-                    word = str(word).strip()
-                    if not word:
-                        continue
-                    key = (data["block_num"][index], data["par_num"][index], data["line_num"][index])
-                    lines.setdefault(key, []).append(word)
-                    score = float(data["conf"][index])
-                    if score >= 0:
-                        scores.append(score)
-                text = "\n".join(" ".join(words) for words in lines.values()).strip()
-                confidence = sum(scores) / len(scores) / 100 if scores else None
+                text, confidence = read_candidate(image, page_mode)
                 parsed = extract_expiry_date(text)
                 candidates.append(((int(parsed["date_detected"]), len(text), confidence or 0), text, confidence))
 
@@ -79,15 +97,17 @@ def _read_easyocr(image_path: str) -> tuple[str, float | None]:
     import easyocr  # type: ignore[import-not-found]
 
     if _easy_reader is None:
-        model_cache = Path(__file__).resolve().parents[2] / "uploads" / ".easyocr"
-        model_cache.mkdir(parents=True, exist_ok=True)
-        _easy_reader = easyocr.Reader(
-            ["en"],
-            gpu=False,
-            model_storage_directory=str(model_cache),
-            user_network_directory=str(model_cache / "user_network"),
-            download_enabled=True,
-        )
+        with _easy_reader_lock:
+            if _easy_reader is None:
+                model_cache = Path(__file__).resolve().parents[2] / "uploads" / ".easyocr"
+                model_cache.mkdir(parents=True, exist_ok=True)
+                _easy_reader = easyocr.Reader(
+                    ["en"],
+                    gpu=False,
+                    model_storage_directory=str(model_cache),
+                    user_network_directory=str(model_cache / "user_network"),
+                    download_enabled=True,
+                )
     from PIL import Image
     import numpy as np
 

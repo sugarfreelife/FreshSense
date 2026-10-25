@@ -15,6 +15,76 @@ def _humanize(value: str | None) -> str:
     return (value or "unknown").replace("_", " ").capitalize()
 
 
+def _next_evidence_action(
+    *,
+    vision: dict | None,
+    ocr: dict | None,
+    sensor: dict | None,
+    product: dict | None,
+    conflicts: list[dict],
+) -> dict:
+    """Choose one transparent follow-up based on this scan's evidence gaps."""
+    if conflicts:
+        return {
+            "key": "resolve_conflict",
+            "title": "Check the signals that disagree",
+            "detail": "Verify the printed date and repeat any available measurement. Keep both observations visible; this prototype does not average conflicting evidence into a safety verdict.",
+            "action_label": "Add a follow-up scan",
+            "target": "scan",
+        }
+
+    if not (ocr or {}).get("expiry_date"):
+        partial = (ocr or {}).get("expiry_text")
+        detail = (
+            f"The package stamp was only partly read ({partial}). Check the label and enter the full date, or track the batch without a date."
+            if partial
+            else "No complete package date was confirmed. Check the printed label and enter the date, or choose to track this batch without one."
+        )
+        return {
+            "key": "confirm_date",
+            "title": "Confirm the package date",
+            "detail": detail,
+            "action_label": "Review date in pantry form",
+            "target": "pantry",
+        }
+
+    if not (product or {}).get("category"):
+        return {
+            "key": "identify_product",
+            "title": "Identify this product",
+            "detail": "The package text did not give a supported category. Add the product name and category so future scans can stay with the right item.",
+            "action_label": "Add product details",
+            "target": "pantry",
+        }
+
+    sensor_source = (sensor or {}).get("source", "legacy")
+    if sensor_source in {"demo_estimate", "mixed"}:
+        return {
+            "key": "replace_demo_values",
+            "title": "Review estimated environment values",
+            "detail": "Illustrative temperature, humidity, or VOC values are not measurements. Replace them with readings from a calibrated sensor or clear them before comparing scans.",
+            "action_label": "Review scan inputs",
+            "target": "scan",
+        }
+
+    if (vision or {}).get("model_type", "prototype") == "prototype":
+        return {
+            "key": "repeat_observation",
+            "title": "Build a same-item history",
+            "detail": "The appearance model is a prototype. A later photo of this same item can add a time-stamped observation, but it will not validate food safety.",
+            "action_label": "Add a follow-up scan",
+            "target": "scan",
+        }
+
+    return {
+        "key": "review_result",
+        "title": "Review the recorded evidence",
+        "detail": "The scan has a complete package date and product category. Keep the label and any future observations with this batch for traceability.",
+        "action_label": "Review pantry entry",
+        "target": "pantry",
+    }
+
+
 def build_passport(
     *,
     created_at: datetime,
@@ -301,6 +371,14 @@ def build_passport(
         "occurred_at": assessment.get("created_at") or created_at,
     })
 
+    next_action = _next_evidence_action(
+        vision=vision,
+        ocr=ocr,
+        sensor=sensor,
+        product=product,
+        conflicts=conflicts,
+    )
+
     return {
         "summary": summary,
         "explanation": explanation,
@@ -308,4 +386,5 @@ def build_passport(
         "timeline": timeline,
         "conflicts": conflicts,
         "limitations": limitations,
+        "next_action": next_action,
     }

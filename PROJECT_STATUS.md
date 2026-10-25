@@ -6,9 +6,11 @@ FreshSense is a working student-demo application for package reading, scan evide
 
 - Account sign-in and user-scoped scan history.
 - Mobile camera/upload scanning with image framing and retake guidance.
+- Common raster image uploads normalized to JPEG for display/analysis while retaining the private original, with EXIF orientation and transparency handled consistently; fast OCR first pass with enhanced retries for difficult stamps.
 - Package OCR/date parsing and product-category recognition with visible evidence and source.
 - User review for dates and categories when recognition is incomplete or needs correction.
 - Freshness Passport evidence, limitations, conflicts, and repeat-scan timeline.
+- Rule-based Evidence Recovery Loop that prioritizes a scan's missing or conflicting evidence and offers a corresponding manual review or follow-up action.
 - Pantry batches with quantity, package-date provenance, storage location, opened date, notes, and optional reminder window.
 - Date watch, explainable use-next sorting, in-app reminder queue, and opt-in browser alerts while FreshSense is open.
 - SQLite local-demo startup and Alembic migrations for PostgreSQL.
@@ -34,6 +36,7 @@ FreshSense is a working student-demo application for package reading, scan evide
 - Browser reminders are checked while the app is open. They are not delivered while the browser/app is closed.
 - Temperature, humidity, and VOC demo values are illustrative unless entered from an actual calibrated sensor.
 - No learned multimodal fusion, shelf-life regression, or calibrated ESP32 hardware model is currently implemented.
+- The Evidence Recovery Loop is a transparent workflow rule, not a trained AI model, proven novelty, or a safety recommendation.
 
 ## Next research phase
 

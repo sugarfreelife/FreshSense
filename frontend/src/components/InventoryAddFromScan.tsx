@@ -53,7 +53,7 @@ export default function InventoryAddFromScan({ scan }: { scan: Scan }) {
 
   if (saved) {
     return (
-      <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4" aria-live="polite">
+      <section id="pantry-entry" className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4" aria-live="polite">
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-800">Added to your inventory</p>
         <p className="mt-1 font-semibold text-emerald-950">{quantity} × {name}</p>
         <Link to="/inventory" className="mt-2 inline-block text-sm font-semibold text-emerald-800 underline">Open pantry inventory</Link>
@@ -62,7 +62,7 @@ export default function InventoryAddFromScan({ scan }: { scan: Scan }) {
   }
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm">
+    <section id="pantry-entry" className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm">
       <div className="bg-slate-950 px-4 py-4 text-white">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-300">FreshSense / Stock intake</p>
         <h2 className="mt-1 text-lg font-semibold">Add this purchase to your pantry</h2>

@@ -1,10 +1,10 @@
 # A Multimodal Edge-AI Framework for Food Freshness Assessment and Shelf-Life Prediction Using Vision, VOC Sensing and OCR
 
-**Product name:** FreshSense AI · Phase-1 60% milestone (functional foundation, honest prototype labels).
+**Product name:** FreshSense AI · a student prototype for traceable food-package assessment.
 
 Combines image-based freshness estimates, VOC/environmental sensing (API + ESP32 abstraction), OCR expiry extraction, and deterministic decision rules. A Freshness Passport records the evidence behind each scan; users can link repeat scans to the same named food item and inspect a chronological record of assessments and storage context.
 
-> Assessment is informational, not certified food-safety judgment. Prototype vision output is labeled `prototype`, unfinished fusion/shelf-life as `not_implemented`/Phase 2.
+> The “60%” figure in the original Phase-1 plan was an implementation milestone, not measured accuracy or a live readiness score. Assessment is informational, not certified food-safety judgment. Prototype vision output is labeled `prototype`; unfinished fusion and shelf-life features remain research work.
 
 ## Stack
 - Frontend: React + Vite + TS + Tailwind + PWA (vite-plugin-pwa), React Router, TanStack Query, axios, zod
@@ -49,6 +49,8 @@ If the application database already has the exact initial schema created by an o
 
 ## Flow
 PWA → register/login → scan (camera/upload + optional context) → vision/OCR/decision → Freshness Passport → confirm or enter the package date → record the purchased quantity as a pantry batch → follow the date watch and scan history.
+
+Uploads accept common raster formats (JPEG, PNG, WebP, GIF, BMP, TIFF, AVIF, and HEIC/HEIF). The original upload is retained privately; an oriented JPEG derivative (up to 2,560 pixels per side) is used for consistent display and faster analysis. Images must be at most 10 MB and 40 megapixels. Clear labels use a fast first OCR pass; difficult labels retain the multi-view retry path.
 
 The Pantry keeps each purchase batch separate, so the same product can have a different quantity and label date on each purchase. If OCR does not produce a date, stock intake asks the user to read and enter the package date or explicitly save the batch without one. Each batch can also record storage location, opened date, notes, and an optional reminder window. Browser alerts are checked while the app is open; the pantry's “use next” cue sorts recorded dates and explains its recommendation. These are organizing aids, not food-safety verdicts. Inventory is private to the signed-in user. See [`DEMO_GUIDE.md`](DEMO_GUIDE.md) for the presentation flow, phone smoke-check, and package-label evaluation.
 

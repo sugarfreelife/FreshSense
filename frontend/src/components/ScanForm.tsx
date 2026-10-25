@@ -14,6 +14,7 @@ export default function ScanForm({
 }) {
   const [image, setImage] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewUnavailable, setPreviewUnavailable] = useState(false);
   const [foodType, setFoodType] = useState("");
   const [trackedItemId, setTrackedItemId] = useState(() => new URLSearchParams(window.location.search).get("item") ?? "");
   const [newItemName, setNewItemName] = useState("");
@@ -41,8 +42,9 @@ export default function ScanForm({
   const pickFile = (file: File | undefined) => {
     setFormError(null);
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      setFormError("Please choose an image file (JPEG/PNG).");
+    const supportedImageExtension = /\.(jpe?g|png|webp|gif|tiff?|bmp|dib|avif|heic|heif|jp2|j2k|ico|tga|pcx|ppm|pgm|pbm|qoi)$/i.test(file.name);
+    if (file.type && !file.type.startsWith("image/") && !supportedImageExtension) {
+      setFormError("Please choose an image file. The server checks the image format before analysis.");
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
@@ -50,6 +52,7 @@ export default function ScanForm({
       return;
     }
     setImage(file);
+    setPreviewUnavailable(false);
     setPreviewUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev);
       return URL.createObjectURL(file);
@@ -58,6 +61,7 @@ export default function ScanForm({
 
   const clearImage = () => {
     setImage(null);
+    setPreviewUnavailable(false);
     setPreviewUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev);
       return null;
@@ -160,11 +164,19 @@ export default function ScanForm({
           </div>
         ) : (
           <div className="mt-3">
-            <img
-              src={previewUrl}
-              alt="Selected food preview"
-              className="max-h-64 w-full rounded-xl object-cover"
-            />
+            {previewUnavailable && (
+              <p role="status" className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                This browser cannot preview this format, but FreshSense can still upload and convert it for analysis.
+              </p>
+            )}
+            {!previewUnavailable && (
+              <img
+                src={previewUrl}
+                alt="Selected food preview"
+                className="max-h-64 w-full rounded-xl object-cover"
+                onError={() => setPreviewUnavailable(true)}
+              />
+            )}
             <div className="mt-2 grid grid-cols-2 gap-2">
               <button
                 type="button"
@@ -184,7 +196,7 @@ export default function ScanForm({
           </div>
         )}
         <p className="mt-2 text-xs text-slate-500">
-          On mobile, “Take photo” opens the rear camera.
+          Common image formats are accepted (JPEG, PNG, WebP, GIF, TIFF, BMP, AVIF, and HEIC). Maximum upload size: 10 MB. On mobile, “Take photo” opens the rear camera.
         </p>
       </div>
 

@@ -81,6 +81,21 @@ class PassportConflictOut(BaseModel):
     detail: str
 
 
+class PassportNextActionOut(BaseModel):
+    key: Literal[
+        "resolve_conflict",
+        "confirm_date",
+        "identify_product",
+        "replace_demo_values",
+        "repeat_observation",
+        "review_result",
+    ]
+    title: str
+    detail: str
+    action_label: str
+    target: Literal["pantry", "scan"]
+
+
 class FreshnessPassportOut(BaseModel):
     summary: str
     explanation: str
@@ -88,6 +103,7 @@ class FreshnessPassportOut(BaseModel):
     timeline: list[PassportEventOut] = Field(default_factory=list)
     conflicts: list[PassportConflictOut] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
+    next_action: PassportNextActionOut
 
 
 class ScanOut(BaseModel):

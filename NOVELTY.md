@@ -19,6 +19,23 @@ record storage context, and see why a batch is in the reminder queue. The
 model. The system does not calculate a validated deterioration rate or claim
 a food-safety determination.
 
+## Evidence Recovery Loop (implemented workflow contribution)
+
+For each scan, a deterministic rule selects the highest-priority evidence gap
+or conflict and proposes a concrete next step: verify disagreeing signals,
+confirm a missing/partial package date, identify an unsupported product,
+replace illustrative sensor values, or add a later same-item observation.
+The Passport retains the underlying observations and their provenance; the
+workflow does not overwrite uncertainty with a model-generated answer. This
+is currently ordinary, inspectable application logic, not a learned AI model.
+
+The research hypothesis is that uncertainty-triggered evidence collection
+could improve traceability and reduce incomplete household records compared
+with showing a static scan result. That hypothesis needs a usability study,
+error analysis, and comparison against existing systems before any novelty or
+performance claim. See `PATENT_DISCLOSURE_DRAFT.md` for a preliminary
+invention-disclosure outline and prior-art risks; it is not a patent filing.
+
 This is an implemented product contribution and a **research hypothesis**, not
 a claim of scientific priority or proven accuracy. A related-work review is
 still needed before making an academic novelty claim.

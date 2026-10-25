@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import uuid
@@ -9,6 +10,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Query, Response, Up
 from fastapi.responses import FileResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
 from app.core.deps import get_current_user, get_db
@@ -20,7 +22,8 @@ from app.ocr.service import extract_text_from_image
 from app.schemas.scan import ScanOut
 from app.services import assessment_service
 from app.services.passport_service import build_passport
-from app.utils.files import MAX_FILE_SIZE_BYTES, validate_extension, validate_mime, validate_size
+from app.utils.files import MAX_FILE_SIZE_BYTES, validate_size
+from app.utils.images import normalize_uploaded_image
 
 router = APIRouter(prefix="/scans", tags=["scans"])
 _BACKEND_DIR = Path(__file__).resolve().parents[4]
@@ -137,31 +140,28 @@ async def create_scan(
         if tracked_item is None:
             raise HTTPException(status_code=404, detail="Tracked item not found")
 
-    filename = file.filename or "upload.jpg"
-    if not validate_extension(filename):
-        raise HTTPException(status_code=400, detail="Unsupported file extension. Use jpg, jpeg, png, or webp.")
-    if not validate_mime(file.content_type):
-        raise HTTPException(status_code=400, detail=f"Unsupported MIME type: {file.content_type}")
     contents = await file.read(MAX_FILE_SIZE_BYTES + 1)
     if not validate_size(len(contents)):
         raise HTTPException(status_code=400, detail="File too large. Max 10MB.")
 
     upload_dir = _upload_root()
     upload_dir.mkdir(parents=True, exist_ok=True)
-    ext = os.path.splitext(filename.lower())[1] or ".jpg"
-    safe_name = f"{uuid.uuid4().hex}{ext}"
+    upload_id = uuid.uuid4().hex
+    safe_name = f"{upload_id}.jpg"
     dest_path = str(upload_dir / safe_name)
+    original_path = upload_dir / f"{upload_id}.source"
     try:
-        with open(dest_path, "xb") as f:
-            f.write(contents)
+        try:
+            normalize_uploaded_image(contents, dest_path)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        with original_path.open("xb") as original_file:
+            original_file.write(contents)
 
-        from app.utils.images import verify_image
-
-        if not verify_image(dest_path):
-            raise HTTPException(status_code=400, detail="Uploaded file is not a valid image.")
-
-        vision = predict_image(dest_path)
-        ocr = extract_text_from_image(dest_path)
+        vision, ocr = await asyncio.gather(
+            run_in_threadpool(predict_image, dest_path),
+            run_in_threadpool(extract_text_from_image, dest_path),
+        )
         product = recognize_product(ocr.get("raw_text", ""), user_label=food_type)
         if product["category"] and product["source"] == "package_text":
             vision["food_type"] = product["category"]
@@ -249,6 +249,10 @@ async def create_scan(
         db.rollback()
         try:
             os.remove(dest_path)
+        except OSError:
+            pass
+        try:
+            original_path.unlink(missing_ok=True)
         except OSError:
             pass
         raise
@@ -401,12 +405,14 @@ def delete_scan(scan_id: str, db: Session = Depends(get_db), current: User = Dep
     scan = db.query(FoodScan).filter(FoodScan.id == scan_id, FoodScan.user_id == current.id).first()
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found")
-    image_path = scan.image_path
+    image_path = _resolve_scan_image(scan.image_path) if scan.image_path else None
     db.delete(scan)
     db.commit()
-    try:
-        if image_path and os.path.exists(image_path):
-            os.remove(image_path)
-    except OSError:
-        pass
+    upload_root = _upload_root()
+    if image_path and image_path.is_relative_to(upload_root):
+        for path in (image_path, image_path.with_suffix(".source")):
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
     return {"message": "Scan deleted"}

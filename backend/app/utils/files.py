@@ -2,8 +2,10 @@
 
 import os
 
-ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
-ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
+ALLOWED_EXTENSIONS = {
+    ".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".dib", ".tif", ".tiff",
+    ".avif", ".heic", ".heif", ".jp2", ".j2k", ".ico", ".tga", ".pcx", ".ppm", ".pgm", ".pbm",
+}
 MAX_FILE_SIZE_MB = 10
 MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
 
@@ -14,7 +16,7 @@ def validate_extension(filename: str) -> bool:
 
 def validate_mime(content_type: str | None) -> bool:
     mime_type = (content_type or "").split(";", 1)[0].strip().lower()
-    return mime_type in ALLOWED_MIME_TYPES
+    return mime_type.startswith("image/")
 
 
 def validate_size(size_bytes: int) -> bool:
