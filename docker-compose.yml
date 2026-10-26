@@ -22,7 +22,7 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      ENVIRONMENT: production
+      ENVIRONMENT: ${ENVIRONMENT:-production}
       DATABASE_URL: postgresql+psycopg2://freshsense:${POSTGRES_PASSWORD}@db:5432/freshsense
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in the environment file}
       CORS_ORIGINS: ${CORS_ORIGINS:?Set CORS_ORIGINS to the HTTPS application origin}
