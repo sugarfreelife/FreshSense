@@ -6,6 +6,7 @@ import LoadingSkeleton from "../components/LoadingSkeleton";
 import { useWorkspaceMode } from "../context/WorkspaceModeContext";
 import EvidencePriorityQueue from "../components/EvidencePriorityQueue";
 import BusinessWorkspacePanel from "../components/BusinessWorkspacePanel";
+import { downloadInventoryCsv } from "../inventoryCsv";
 
 type Filter = "all" | "attention" | "undated";
 
@@ -214,6 +215,8 @@ export default function Inventory() {
   const [expiryDate, setExpiryDate] = useState("");
   const [stockLocation, setStockLocation] = useState("");
   const [formError, setFormError] = useState("");
+  const [exportNotice, setExportNotice] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!business || !workspacesQuery.data) return;
@@ -246,6 +249,12 @@ export default function Inventory() {
     const matchesFilter = filter === "all" || (filter === "attention" && ["expired", "urgent", "soon"].includes(item.status)) || (filter === "undated" && item.status === "unknown");
     return matchesQuery && matchesFilter;
   });
+
+  const clearSearch = () => {
+    setQuery("");
+    setExportNotice("");
+    searchRef.current?.focus();
+  };
 
   const addManual = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -330,13 +339,22 @@ export default function Inventory() {
             <h2 className="text-xl font-bold text-slate-900">{business ? "Stock batches" : "Tracked batches"}</h2>
             <p className="mt-1 text-sm text-slate-500">{business ? "Each delivery lot keeps its own count and package date." : "A different purchase can have a different expiry date."}</p>
           </div>
-          <label className="sr-only" htmlFor="inventory-search">{business ? "Search stock" : "Search pantry"}</label>
-          <input id="inventory-search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search products" className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm sm:w-56" />
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+            <label className="sr-only" htmlFor="inventory-search">{business ? "Search stock" : "Search pantry"}</label>
+            <div className="relative w-full sm:w-56">
+              <input ref={searchRef} id="inventory-search" value={query} onChange={(e) => { setQuery(e.target.value); setExportNotice(""); }} placeholder="Search products" className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 pr-10 text-sm" />
+              {query && <button type="button" title="Clear search" aria-label="Clear inventory search" onClick={clearSearch} className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald-800">
+                <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className="h-4 w-4"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
+              </button>}
+            </div>
+            <button type="button" disabled={!visible.length} onClick={() => { downloadInventoryCsv(visible, business ? activeWorkspace?.name ?? "stock" : "pantry"); setExportNotice(`Downloaded ${visible.length} ${visible.length === 1 ? "batch" : "batches"} as a CSV file.`); }} className="inline-flex min-h-10 items-center justify-center rounded-xl border border-emerald-800 bg-white px-3 py-2 text-sm font-semibold text-emerald-900 transition hover:bg-emerald-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400">Export CSV <span className="ml-1 tabular-nums">({visible.length})</span></button>
+          </div>
         </div>
+        {exportNotice && <p className="mt-2 text-sm text-emerald-800" role="status">{exportNotice}</p>}
 
         <div className="mt-3 flex flex-wrap gap-2" aria-label="Inventory filters">
           {([["all", "All batches"], ["attention", "Date watch"], ["undated", "Need a date"]] as const).map(([value, label]) => (
-            <button key={value} type="button" onClick={() => setFilter(value)} aria-pressed={filter === value} className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${filter === value ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white text-slate-600 hover:border-slate-500"}`}>{label}</button>
+            <button key={value} type="button" onClick={() => { setFilter(value); setExportNotice(""); }} aria-pressed={filter === value} className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${filter === value ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white text-slate-600 hover:border-slate-500"}`}>{label}</button>
           ))}
         </div>
 
