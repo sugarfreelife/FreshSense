@@ -106,7 +106,12 @@ const backendEnv = {
   ].join(","),
 };
 
-launch(python, ["-m", "uvicorn", "app.main:app", "--host", bindHost, "--port", String(apiPort), "--reload"], backend, "Backend", false, backendEnv);
+const backendArgs = ["-m", "uvicorn", "app.main:app", "--host", bindHost, "--port", String(apiPort)];
+// Uvicorn's Windows reload worker can fail to reattach its inherited socket
+// when this launcher is started from the Codex terminal. Keep reload on Unix,
+// but use one stable API process on Windows so the demo remains reachable.
+if (!windows) backendArgs.push("--reload");
+launch(python, backendArgs, backend, "Backend", false, backendEnv);
 launch(process.execPath, [vite, "--host", bindHost, "--port", String(frontendPort), "--strictPort"], frontend, "Frontend", false, frontendEnv);
 
 async function findAvailablePort(start, host) {
