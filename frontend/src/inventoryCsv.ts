@@ -73,5 +73,6 @@ export function downloadInventoryCsv(items: InventoryItem[], scope: string): voi
   document.body.append(link);
   link.click();
   link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  // Give the browser time to begin reading the Blob before releasing its URL.
+  window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
 }
