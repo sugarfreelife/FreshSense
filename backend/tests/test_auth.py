@@ -31,3 +31,19 @@ def test_login_wrong_password(client):
 def test_me_unauthorized(client):
     r = client.get("/api/v1/auth/me")
     assert r.status_code == 401
+
+
+def test_login_rate_limit_returns_retry_after(client):
+    for _ in range(10):
+        response = client.post(
+            "/api/v1/auth/login",
+            json={"email": "missing@example.com", "password": "wrong-password"},
+        )
+        assert response.status_code == 401
+
+    blocked = client.post(
+        "/api/v1/auth/login",
+        json={"email": "missing@example.com", "password": "wrong-password"},
+    )
+    assert blocked.status_code == 429
+    assert int(blocked.headers["retry-after"]) > 0

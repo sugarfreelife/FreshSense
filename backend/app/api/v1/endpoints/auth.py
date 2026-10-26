@@ -4,6 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
+from app.core.rate_limit import limit_auth_requests
 from app.core.security import create_access_token, get_password_hash, verify_password
 from app.models.user import User
 from app.schemas.auth import AuthResponse, Token, UserCreate, UserLogin, UserOut
@@ -11,7 +12,12 @@ from app.schemas.auth import AuthResponse, Token, UserCreate, UserLogin, UserOut
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register",
+    response_model=AuthResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(limit_auth_requests)],
+)
 def register(payload: UserCreate, db: Session = Depends(get_db)):
     existing = db.query(User).filter(User.email == payload.email).first()
     if existing:
@@ -32,7 +38,7 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
     return AuthResponse(access_token=create_access_token(subject=user.id), user=UserOut.model_validate(user))
 
 
-@router.post("/login", response_model=AuthResponse)
+@router.post("/login", response_model=AuthResponse, dependencies=[Depends(limit_auth_requests)])
 def login(payload: UserLogin, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == payload.email).first()
     if not user or not verify_password(payload.password, user.hashed_password):
@@ -41,7 +47,7 @@ def login(payload: UserLogin, db: Session = Depends(get_db)):
     return AuthResponse(access_token=token, user=UserOut.model_validate(user))
 
 
-@router.post("/token", response_model=Token, include_in_schema=False)
+@router.post("/token", response_model=Token, include_in_schema=False, dependencies=[Depends(limit_auth_requests)])
 def login_oauth(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == form.username).first()
     if not user or not verify_password(form.password, user.hashed_password):

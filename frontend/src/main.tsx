@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
 import { ToastProvider } from "./components/Toast";
+import { WorkspaceModeProvider } from "./context/WorkspaceModeContext";
 import "./index.css";
 
 const queryClient = new QueryClient({
@@ -23,7 +24,9 @@ ReactDOM.createRoot(rootEl).render(
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <ToastProvider>
-          <App />
+          <WorkspaceModeProvider>
+            <App />
+          </WorkspaceModeProvider>
         </ToastProvider>
       </BrowserRouter>
     </QueryClientProvider>

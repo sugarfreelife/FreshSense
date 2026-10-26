@@ -1,4 +1,5 @@
 import axios from "axios";
+import { BUSINESS_WORKSPACE_STORAGE_KEY, WORKSPACE_MODE_STORAGE_KEY } from "../context/WorkspaceModeContext";
 
 const TOKEN_KEY = "freshsense_token";
 
@@ -36,10 +37,20 @@ export const apiClient = axios.create({
 });
 
 apiClient.interceptors.request.use((config) => {
+  config.headers = config.headers ?? {};
   const token = getToken();
   if (token) {
-    config.headers = config.headers ?? {};
     config.headers.Authorization = `Bearer ${token}`;
+  }
+  try {
+    const mode = localStorage.getItem(WORKSPACE_MODE_STORAGE_KEY) === "business" ? "business" : "personal";
+    config.headers["X-Workspace-Mode"] = mode;
+    const workspaceId = mode === "business" ? localStorage.getItem(BUSINESS_WORKSPACE_STORAGE_KEY) : null;
+    if (workspaceId) config.headers["X-Workspace-Id"] = workspaceId;
+    else delete config.headers["X-Workspace-Id"];
+  } catch {
+    config.headers["X-Workspace-Mode"] = "personal";
+    delete config.headers["X-Workspace-Id"];
   }
   return config;
 });

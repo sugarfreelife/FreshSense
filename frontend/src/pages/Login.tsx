@@ -11,8 +11,9 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!e.currentTarget.reportValidity()) return;
     if (!email || !password) {
       push("Enter email and password.", "error");
       return;
@@ -35,7 +36,7 @@ export default function Login() {
       <p className="mt-1 text-sm text-slate-500">
         Access your scan history and freshness reports.
       </p>
-      <form onSubmit={handleSubmit} className="mt-4 space-y-3" aria-label="Login form">
+      <form noValidate onSubmit={handleSubmit} className="mt-4 space-y-3" aria-label="Login form">
         <label className="block text-sm">
           <span className="text-slate-600">Email</span>
           <input

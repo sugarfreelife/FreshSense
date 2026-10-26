@@ -12,8 +12,11 @@ const windows = process.platform === "win32";
 const phoneMode = process.argv.includes("--phone");
 const phoneHostIndex = process.argv.indexOf("--phone-host");
 const phoneHostArg = phoneHostIndex >= 0 ? process.argv[phoneHostIndex + 1] : undefined;
+const apiPortIndex = process.argv.indexOf("--api-port");
+const requestedApiPort = apiPortIndex >= 0 ? Number(process.argv[apiPortIndex + 1]) : undefined;
 const bindHost = phoneMode ? (phoneHostArg || await getPrivateIPv4()) : "127.0.0.1";
 const frontendPort = await findAvailablePort(5173, bindHost);
+const apiPort = requestedApiPort || await findAvailablePort(8000, bindHost);
 const pythonVenv = join(
   backend,
   ".venv",
@@ -24,12 +27,7 @@ const python = existsSync(pythonVenv)
   : windows
     ? "python"
     : "python3";
-const vite = join(
-  frontend,
-  "node_modules",
-  ".bin",
-  windows ? "vite.cmd" : "vite",
-);
+const vite = join(frontend, "node_modules", "vite", "bin", "vite.js");
 
 if (!existsSync(vite)) {
   console.error(`Frontend dependencies are missing. Run 'npm install' in ${frontend}.`);
@@ -88,32 +86,28 @@ process.on("SIGINT", () => stop("SIGINT", 130));
 process.on("SIGTERM", () => stop("SIGTERM", 143));
 
 if (phoneMode) {
-  console.log(`Backend:  http://${bindHost}:8000  (API docs: /docs)`);
+  console.log(`Backend:  http://${bindHost}:${apiPort}  (API docs: /docs)`);
   console.log(`Frontend: http://${bindHost}:${frontendPort}`);
   console.log(`Phone:    http://${bindHost}:${frontendPort} (connect phone and PC to the same Wi-Fi)`);
   console.log("Camera capture: open the app, sign in, then tap Take photo on the scan page.");
 } else {
-  console.log("Backend:  http://127.0.0.1:8000  (API docs: /docs)");
+  console.log(`Backend:  http://${bindHost}:${apiPort}  (API docs: /docs)`);
   console.log(`Frontend: http://127.0.0.1:${frontendPort}`);
 }
 console.log("Press Ctrl+C to stop both services.");
 
-const frontendEnv = phoneMode
-  ? { ...process.env, VITE_API_URL: `http://${bindHost}:8000/api/v1` }
-  : process.env;
-const backendEnv = phoneMode
-  ? {
-      ...process.env,
-      CORS_ORIGINS: [
-        `http://localhost:${frontendPort}`,
-        `http://127.0.0.1:${frontendPort}`,
-        `http://${bindHost}:${frontendPort}`,
-      ].join(","),
-    }
-  : process.env;
+const frontendEnv = { ...process.env, VITE_API_URL: `http://${bindHost}:${apiPort}/api/v1` };
+const backendEnv = {
+  ...process.env,
+  CORS_ORIGINS: [
+    `http://localhost:${frontendPort}`,
+    `http://127.0.0.1:${frontendPort}`,
+    ...(phoneMode ? [`http://${bindHost}:${frontendPort}`] : []),
+  ].join(","),
+};
 
-launch(python, ["-m", "uvicorn", "app.main:app", "--host", bindHost, "--port", "8000"], backend, "Backend", false, backendEnv);
-launch("npm", ["run", "dev", "--", "--host", bindHost, "--port", String(frontendPort), "--strictPort"], frontend, "Frontend", windows, frontendEnv);
+launch(python, ["-m", "uvicorn", "app.main:app", "--host", bindHost, "--port", String(apiPort), "--reload"], backend, "Backend", false, backendEnv);
+launch(process.execPath, [vite, "--host", bindHost, "--port", String(frontendPort), "--strictPort"], frontend, "Frontend", false, frontendEnv);
 
 async function findAvailablePort(start, host) {
   for (let port = start; port < start + 20; port += 1) {

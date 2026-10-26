@@ -19,6 +19,14 @@ record storage context, and see why a batch is in the reminder queue. The
 model. The system does not calculate a validated deterioration rate or claim
 a food-safety determination.
 
+Personal view summarizes private household batches. Seller view uses a shared
+business workspace with owner/manager/staff roles, separately scoped stock and
+scan records, per-batch quantities, recorded label dates, and a free-text
+branch/stock location. This is a basic shared inventory workflow. It does not
+provide email invitations, ownership transfer, suppliers, POS transactions, or
+consolidated multi-location analytics, and those capabilities should not be
+implied in a product demo.
+
 ## Evidence Recovery Loop (implemented workflow contribution)
 
 For each scan, a deterministic rule selects the highest-priority evidence gap
@@ -39,6 +47,44 @@ invention-disclosure outline and prior-art risks; it is not a patent filing.
 This is an implemented product contribution and a **research hypothesis**, not
 a claim of scientific priority or proven accuracy. A related-work review is
 still needed before making an academic novelty claim.
+
+## Patent research direction to investigate
+
+A more specific research direction is an **evidence-aware batch intervention
+router**. The prototype now has an initial, deterministic priority queue. It
+combines recorded-date urgency (45%), date evidence gap/provenance (35%), and
+the batch's share of tracked units (20%), ranks the batches, explains the
+contributing evidence, and links each item to its editable batch record. It
+does not use a learned model, calibrated OCR confidence, live sensor telemetry,
+sales, or consumption data. Its score is a UI priority only; the weights are
+not empirically validated.
+
+The research direction is to extend this into a closed-loop evidence router:
+combine calibrated date-reading uncertainty, quantity at stake, remaining
+time, and measured household depletion or seller sell-through; then select
+which observation is worth requesting (date confirmation, targeted recapture,
+stock recount, or review) based on expected impact. Log the requested action
+and the evidence that resolves it so future evaluation can measure missed
+high-impact records and unnecessary prompts against static alerts. The
+technical question is whether this system reduces correction burden while
+improving evidence completeness. These additional inputs and outcomes are
+future work, not part of the current implementation.
+
+This is a concept for prior-art investigation, not a claim that FreshSense has
+invented it or that it is patentable. Expiry-based stock tracking and automated
+perishable inventory management have substantial prior art. A reviewed patent
+already describes recording product identity/quantity, deriving expiry dates,
+tracking perishable inventory, and showing soon-to-expire alerts and suggested
+actions ([US20210278129A1](https://patents.google.com/patent/US20210278129A1/en)).
+The differentiating detail would therefore need to be a specific technical
+mechanism for uncertainty-and-quantity-driven evidence acquisition, shown to
+work with measured results, rather than merely adding AI, sensors, or seller
+terminology. Search Indian, WIPO, US, and other relevant patent and non-patent
+literature before any public disclosure or filing. In India, Section 3(k)
+excludes business methods, computer programs *per se*, and algorithms; see the
+[Indian Patent Act, Section 3](https://ipindia.gov.in/acts/patent-act-1970/section-3).
+Ask a registered patent agent or your institution's IP cell to assess the
+specific technical contribution and filing strategy.
 
 ## Research question
 

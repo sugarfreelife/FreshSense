@@ -2,14 +2,18 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { Scan } from "../api/hooks";
 import { useCreateInventoryItem } from "../api/hooks";
+import { useWorkspaceMode } from "../context/WorkspaceModeContext";
 
 type ExpiryChoice = "confirm_ocr" | "enter_date" | "unknown";
 
 export default function InventoryAddFromScan({ scan }: { scan: Scan }) {
+  const { mode } = useWorkspaceMode();
+  const business = mode === "business";
   const hasOcrDate = Boolean(scan.expiry_date);
   const [name, setName] = useState(scan.product?.product_name || scan.product?.category || scan.food_type || "");
   const [category, setCategory] = useState(scan.product?.category || scan.food_type || "Other");
   const [quantity, setQuantity] = useState("1");
+  const [stockLocation, setStockLocation] = useState("");
   const [expiryDate, setExpiryDate] = useState(scan.expiry_date ?? "");
   const [choice, setChoice] = useState<ExpiryChoice>(hasOcrDate ? "confirm_ocr" : "enter_date");
   const [confirmed, setConfirmed] = useState(false);
@@ -17,11 +21,12 @@ export default function InventoryAddFromScan({ scan }: { scan: Scan }) {
   const createItem = useCreateInventoryItem();
   const [saved, setSaved] = useState(false);
 
-  const submit = (event: React.FormEvent) => {
+  const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!event.currentTarget.reportValidity()) return;
     setError("");
     if (!name.trim()) {
-      setError("Add a product name so you can find it in your pantry.");
+      setError(`Add a product name so you can find it in your ${business ? "stock ledger" : "pantry"}.`);
       return;
     }
     const count = Number(quantity);
@@ -44,7 +49,8 @@ export default function InventoryAddFromScan({ scan }: { scan: Scan }) {
       quantity: count,
       expiry_date: choice === "unknown" ? undefined : expiryDate,
       expiry_source: choice === "unknown" ? "unknown" : choice === "confirm_ocr" ? "ocr_confirmed" : "user_entered",
-      source_scan_id: String(scan.id)
+      source_scan_id: String(scan.id),
+      ...(business && stockLocation.trim() ? { stock_location: stockLocation.trim() } : {})
     }, {
       onSuccess: () => setSaved(true),
       onError: () => setError("Could not save this purchase. Check your connection and try again.")
@@ -54,9 +60,9 @@ export default function InventoryAddFromScan({ scan }: { scan: Scan }) {
   if (saved) {
     return (
       <section id="pantry-entry" className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4" aria-live="polite">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-800">Added to your inventory</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-800">{business ? "Stock batch received" : "Added to your inventory"}</p>
         <p className="mt-1 font-semibold text-emerald-950">{quantity} × {name}</p>
-        <Link to="/inventory" className="mt-2 inline-block text-sm font-semibold text-emerald-800 underline">Open pantry inventory</Link>
+        <Link to="/inventory" className="mt-2 inline-block text-sm font-semibold text-emerald-800 underline">{business ? "Open stock ledger" : "Open pantry inventory"}</Link>
       </section>
     );
   }
@@ -65,20 +71,25 @@ export default function InventoryAddFromScan({ scan }: { scan: Scan }) {
     <section id="pantry-entry" className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm">
       <div className="bg-slate-950 px-4 py-4 text-white">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-300">FreshSense / Stock intake</p>
-        <h2 className="mt-1 text-lg font-semibold">Add this purchase to your pantry</h2>
-        <p className="mt-1 text-sm text-slate-300">Track the quantity and the date printed on this batch.</p>
+        <h2 className="mt-1 text-lg font-semibold">{business ? "Receive this stock batch" : "Add this purchase to your pantry"}</h2>
+        <p className="mt-1 text-sm text-slate-300">{business ? "Record the received quantity and verify the package date for this delivery lot." : "Track the quantity and the date printed on this batch."}</p>
       </div>
-      <form onSubmit={submit} className="space-y-3 p-4">
+      <form noValidate onSubmit={submit} className="space-y-3 p-4">
         <div className="grid gap-3 sm:grid-cols-[1fr_120px]">
           <label className="block text-sm">
             <span className="font-medium text-slate-700">Product</span>
             <input value={name} onChange={(e) => setName(e.target.value)} maxLength={160} required placeholder="e.g. Whole milk" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
           </label>
           <label className="block text-sm">
-            <span className="font-medium text-slate-700">How many?</span>
+            <span className="font-medium text-slate-700">{business ? "Units received" : "How many?"}</span>
             <input type="number" min={1} max={9999} step={1} inputMode="numeric" value={quantity} onChange={(e) => setQuantity(e.target.value)} required className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
           </label>
         </div>
+
+        {business && <label className="block text-sm">
+          <span className="font-medium text-slate-700">Branch / stock location</span>
+          <input value={stockLocation} onChange={(event) => setStockLocation(event.target.value)} maxLength={120} placeholder="e.g. Store 2 · Cold room" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+        </label>}
 
         <label className="block text-sm">
           <span className="font-medium text-slate-700">Food category</span>
@@ -121,7 +132,7 @@ export default function InventoryAddFromScan({ scan }: { scan: Scan }) {
 
         {error && <p role="alert" className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">{error}</p>}
         <button type="submit" disabled={createItem.isPending} className="w-full rounded-xl bg-emerald-700 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-60">
-          {createItem.isPending ? "Saving purchase…" : "Save to pantry inventory"}
+          {createItem.isPending ? (business ? "Recording stock…" : "Saving purchase…") : business ? "Receive stock batch" : "Save to pantry inventory"}
         </button>
       </form>
     </section>

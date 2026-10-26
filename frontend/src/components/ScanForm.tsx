@@ -70,9 +70,10 @@ export default function ScanForm({
     if (fileRef.current) fileRef.current.value = "";
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setFormError(null);
+    if (!e.currentTarget.reportValidity()) return;
     if (!image) {
       setFormError("A food photo is required.");
       return;
@@ -118,7 +119,7 @@ export default function ScanForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4" aria-label="New scan form">
+    <form noValidate onSubmit={handleSubmit} className="space-y-4" aria-label="New scan form">
       {/* Hidden native inputs: one for camera, one for gallery */}
       <input
         ref={cameraRef}
@@ -212,7 +213,7 @@ export default function ScanForm({
             onChange={(e) => setFoodType(e.target.value)}
             placeholder="e.g. milk, canned tuna, bread, apple"
             list="freshsense-food-suggestions"
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+            className="mt-1 w-full resize-none rounded-lg border border-slate-300 px-3 py-2"
           />
           <datalist id="freshsense-food-suggestions">
             {["Milk", "Yogurt", "Cheese", "Eggs", "Canned tuna", "Canned beans", "Bread", "Chicken", "Apples", "Frozen vegetables", "Juice", "Other"].map((choice) => <option key={choice} value={choice} />)}
@@ -299,7 +300,7 @@ export default function ScanForm({
             onChange={(e) => setNotes(e.target.value)}
             rows={2}
             placeholder="Storage conditions, printed expiry…"
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+            className="mt-1 w-full resize-none rounded-lg border border-slate-300 px-3 py-2"
           />
         </label>
       </div>
@@ -315,11 +316,11 @@ export default function ScanForm({
         disabled={isSubmitting || !image}
         className="w-full rounded-xl bg-green-600 px-4 py-3 text-base font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {isSubmitting ? "Analyzing… (server inference)" : "Analyze freshness"}
+        {isSubmitting ? "Reading the label…" : "Analyze freshness"}
       </button>
       {isSubmitting && (
         <p aria-live="polite" className="text-center text-sm text-slate-500">
-          Uploading photo and running multimodal analysis…
+          Reading package text and checking the image on the server. Difficult labels can take longer; keep this page open.
         </p>
       )}
     </form>

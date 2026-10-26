@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-query";
 import { z } from "zod";
 import { apiClient, setToken } from "./client";
+import type { WorkspaceMode } from "../context/WorkspaceModeContext";
 
 /* ---------- Schemas ---------- */
 
@@ -131,7 +132,7 @@ export const ScanSchema = NestedScanSchema.transform((scan) => ({
   tracked_item_id: scan.tracked_item_id ?? null,
   tracked_item_label: scan.tracked_item_label ?? null,
   image_url: scan.image_url
-    ? new URL(scan.image_url, apiClient.defaults.baseURL).toString()
+    ? resolveScanImageUrl(scan.image_url)
     : null,
   food_type: scan.product?.category ?? scan.food_label ?? (scan.vision?.food_type === "unknown" ? null : scan.vision?.food_type ?? null),
   product: scan.product ?? { category: null, product_name: null, confidence: null, evidence: [], source: "unrecognized" as const },
@@ -161,6 +162,24 @@ export const ScanSchema = NestedScanSchema.transform((scan) => ({
   passport: scan.passport
 }));
 export type Scan = z.infer<typeof ScanSchema>;
+
+export function resolveScanImageUrl(imageUrl: string): string {
+  const configuredBase = apiClient.defaults.baseURL;
+  const isAbsoluteUrl = configuredBase ? /^[a-z][a-z\d+.-]*:\/\//i.test(configuredBase) : false;
+  const origin = typeof window === "undefined" ? null : window.location.origin;
+  const baseUrl = isAbsoluteUrl
+    ? configuredBase
+    : origin
+      ? new URL(configuredBase || "/", origin).toString()
+      : null;
+
+  if (!baseUrl) return imageUrl;
+  try {
+    return new URL(imageUrl, baseUrl).toString();
+  } catch {
+    return imageUrl;
+  }
+}
 
 const ScanListSchema = z.array(ScanSchema);
 const ScanPageSchema = z.object({
@@ -193,6 +212,7 @@ export const InventoryItemSchema = z.object({
   expiry_source: z.enum(["ocr_confirmed", "user_entered", "unknown"]),
   reminder_days_before: z.number().nullable(),
   storage_location: z.enum(["unknown", "pantry", "refrigerator", "freezer", "room_temperature", "other"]),
+  stock_location: z.string().nullable().optional(),
   opened_date: z.string().nullable(),
   storage_notes: z.string().nullable(),
   days_remaining: z.number().nullable(),
@@ -211,12 +231,29 @@ export interface CreateInventoryInput {
   expiry_source: "ocr_confirmed" | "user_entered" | "unknown";
   reminder_days_before?: 1 | 3 | 7 | null;
   storage_location?: "unknown" | "pantry" | "refrigerator" | "freezer" | "room_temperature" | "other";
+  stock_location?: string;
   opened_date?: string | null;
   storage_notes?: string | null;
   source_scan_id?: string;
 }
 
-export type UpdateInventoryInput = Partial<Pick<CreateInventoryInput, "product_name" | "quantity" | "expiry_source" | "reminder_days_before" | "storage_location" | "opened_date" | "storage_notes">> & { category?: string | null; expiry_date?: string | null };
+export type UpdateInventoryInput = Partial<Pick<CreateInventoryInput, "product_name" | "quantity" | "expiry_source" | "reminder_days_before" | "storage_location" | "opened_date" | "storage_notes">> & { category?: string | null; expiry_date?: string | null; stock_location?: string | null };
+
+export const BusinessWorkspaceSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  role: z.enum(["owner", "manager", "staff"]),
+  created_at: z.string()
+});
+
+export const WorkspaceMemberSchema = z.object({
+  id: z.string(),
+  user_id: z.string(),
+  email: z.string().email(),
+  name: z.string().nullable().optional(),
+  role: z.enum(["owner", "manager", "staff"]),
+  created_at: z.string()
+});
 
 /* ---------- Queries ---------- */
 
@@ -246,9 +283,9 @@ export function useMe(): UseQueryResult<User | null, Error> {
   });
 }
 
-export function useScans() {
+export function useScans(mode: WorkspaceMode, workspaceId: string | null) {
   return useInfiniteQuery({
-    queryKey: ["scans"],
+    queryKey: ["scans", mode, mode === "business" ? workspaceId : null],
     initialPageParam: 0,
     queryFn: async ({ pageParam }) => {
       const res = await apiClient.get("/scans", { params: { limit: 20, offset: pageParam } });
@@ -288,13 +325,58 @@ export function useTrackedItem(id: string | undefined) {
   });
 }
 
-export function useInventory() {
+export function useInventory(mode: WorkspaceMode, workspaceId: string | null) {
   return useQuery({
-    queryKey: ["inventory"],
+    queryKey: ["inventory", mode, mode === "business" ? workspaceId : null],
     queryFn: async () => {
       const res = await apiClient.get("/inventory");
       return z.array(InventoryItemSchema).parse(res.data);
     }
+  });
+}
+
+export function useBusinessWorkspaces() {
+  return useQuery({
+    queryKey: ["business-workspaces"],
+    queryFn: async () => z.array(BusinessWorkspaceSchema).parse((await apiClient.get("/workspaces")).data)
+  });
+}
+
+export function useCreateBusinessWorkspace() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (name: string) => BusinessWorkspaceSchema.parse((await apiClient.post("/workspaces", { name })).data),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["business-workspaces"] })
+  });
+}
+
+export function useWorkspaceMembers(workspaceId: string | null) {
+  return useQuery({
+    queryKey: ["workspace-members", workspaceId],
+    queryFn: async () => z.array(WorkspaceMemberSchema).parse((await apiClient.get(`/workspaces/${workspaceId}/members`)).data),
+    enabled: Boolean(workspaceId)
+  });
+}
+
+export function useAddWorkspaceMember(workspaceId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ email, role }: { email: string; role: "manager" | "staff" }) => {
+      if (!workspaceId) throw new Error("Select a business workspace first");
+      return WorkspaceMemberSchema.parse((await apiClient.post(`/workspaces/${workspaceId}/members`, { email, role })).data);
+    },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["workspace-members", workspaceId] })
+  });
+}
+
+export function useRemoveWorkspaceMember(workspaceId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (membershipId: string) => {
+      if (!workspaceId) throw new Error("Select a business workspace first");
+      await apiClient.delete(`/workspaces/${workspaceId}/members/${membershipId}`);
+    },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["workspace-members", workspaceId] })
   });
 }
 
@@ -359,6 +441,7 @@ export function useLogin(): UseMutationResult<AuthResponse, Error, LoginInput> {
       return AuthResponseSchema.parse(res.data);
     },
     onSuccess: (data) => {
+      qc.removeQueries();
       setToken(data.access_token);
       if (data.user) qc.setQueryData(["me"], data.user);
       else void qc.invalidateQueries({ queryKey: ["me"] });
@@ -380,6 +463,7 @@ export function useRegister(): UseMutationResult<AuthResponse, Error, RegisterIn
       return AuthResponseSchema.parse(res.data);
     },
     onSuccess: (data) => {
+      qc.removeQueries();
       setToken(data.access_token);
       if (data.user) qc.setQueryData(["me"], data.user);
       else void qc.invalidateQueries({ queryKey: ["me"] });
@@ -416,7 +500,7 @@ export function useCreateScan(): UseMutationResult<Scan, Error, CreateScanInput>
         form.append("voc_index", String(input.voc_index));
       if (input.sensor_source) form.append("sensor_source", input.sensor_source);
       if (input.notes) form.append("notes", input.notes);
-      const res = await apiClient.post("/scans", form);
+      const res = await apiClient.post("/scans", form, { timeout: 180_000 });
       return ScanSchema.parse(res.data);
     },
     onSuccess: () => {

@@ -17,6 +17,7 @@ if settings.sqlalchemy_url.startswith("sqlite:"):
     ocr_columns = {column["name"] for column in inspect(engine).get_columns("ocr_results")}
     sensor_columns = {column["name"] for column in inspect(engine).get_columns("sensor_readings")}
     inventory_columns = {column["name"] for column in inspect(engine).get_columns("inventory_items")}
+    scan_columns = {column["name"] for column in inspect(engine).get_columns("food_scans")}
     with engine.begin() as connection:
         if "provider" not in ocr_columns:
             connection.execute(
@@ -40,12 +41,25 @@ if settings.sqlalchemy_url.startswith("sqlite:"):
             connection.execute(text("ALTER TABLE inventory_items ADD COLUMN opened_date DATE"))
         if "storage_notes" not in inventory_columns:
             connection.execute(text("ALTER TABLE inventory_items ADD COLUMN storage_notes TEXT"))
+        if "workspace_id" not in inventory_columns:
+            connection.execute(text("ALTER TABLE inventory_items ADD COLUMN workspace_id VARCHAR(36)"))
+        if "stock_location" not in inventory_columns:
+            connection.execute(text("ALTER TABLE inventory_items ADD COLUMN stock_location VARCHAR(120)"))
+        if "workspace_id" not in scan_columns:
+            connection.execute(text("ALTER TABLE food_scans ADD COLUMN workspace_id VARCHAR(36)"))
     seed_demo_users()
 
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 
 
-app = FastAPI(title="FreshSense AI", version="0.1.0")
+is_production = settings.ENVIRONMENT == "production"
+app = FastAPI(
+    title="FreshSense AI",
+    version="0.1.0",
+    docs_url=None if is_production else "/docs",
+    redoc_url=None if is_production else "/redoc",
+    openapi_url=None if is_production else "/openapi.json",
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -75,4 +89,7 @@ def demo_status():
 
 @app.get("/")
 def root():
-    return {"service": "freshsense-ai", "docs": "/docs", "health": "/api/v1/health"}
+    response = {"service": "freshsense-ai", "health": "/api/v1/health"}
+    if not is_production:
+        response["docs"] = "/docs"
+    return response

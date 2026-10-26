@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 import pytest
 from PIL import Image
 from pydantic import ValidationError
@@ -13,6 +15,7 @@ from app.schemas.inventory import InventoryItemCreate
 from app.ocr.product_parser import recognize_product
 from app.services.decision_service import decide
 from app.utils.files import validate_mime, validate_size
+from app.utils.time import utcnow_naive
 
 
 def test_settings_normalize_postgres_alias_and_reject_other_databases():
@@ -22,7 +25,15 @@ def test_settings_normalize_postgres_alias_and_reject_other_databases():
     )
     assert settings.sqlalchemy_url.startswith("postgresql+psycopg2://")
     with pytest.raises(ValidationError):
-        Settings(DATABASE_URL="sqlite:///freshsense.db", JWT_SECRET="test-only-secret-for-freshsense-at-least-32-bytes")
+        Settings(DATABASE_URL="mysql://localhost/freshsense", JWT_SECRET="test-only-secret-for-freshsense-at-least-32-bytes")
+
+
+def test_database_timestamp_helper_returns_current_utc_without_timezone_metadata():
+    before = datetime.now(timezone.utc).replace(tzinfo=None)
+    value = utcnow_naive()
+    after = datetime.now(timezone.utc).replace(tzinfo=None)
+    assert value.tzinfo is None
+    assert before <= value <= after
 
 
 def test_auth_normalizes_email_and_checks_bcrypt_byte_limit():

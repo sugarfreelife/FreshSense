@@ -1,6 +1,6 @@
 import json
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
@@ -8,6 +8,7 @@ from app.models.scan import FinalAssessment, FoodScan, SensorReading
 from app.models.user import User
 from app.schemas.assessment import AssessmentRequest, AssessmentResponse
 from app.services import assessment_service
+from app.services.workspace_access import get_workspace_scope
 
 router = APIRouter(prefix="/assessments", tags=["assessments"])
 
@@ -17,7 +18,10 @@ def create_assessment(
     payload: AssessmentRequest,
     db: Session = Depends(get_db),
     current: User = Depends(get_current_user),
+    workspace_mode: str = Header(default="personal", alias="X-Workspace-Mode"),
+    workspace_id: str | None = Header(default=None, alias="X-Workspace-Id"),
 ):
+    scope = get_workspace_scope(db, current, workspace_mode, workspace_id)
     vision = None
     if payload.vision_freshness:
         confidence = payload.vision_confidence
@@ -35,11 +39,12 @@ def create_assessment(
 
     scan = None
     if payload.scan_id:
-        scan = (
-            db.query(FoodScan)
-            .filter(FoodScan.id == payload.scan_id, FoodScan.user_id == current.id)
-            .first()
-        )
+        query = db.query(FoodScan).filter(FoodScan.id == payload.scan_id)
+        if scope[0] == "business":
+            query = query.filter(FoodScan.workspace_id == scope[1]) if scope[1] else query.filter(FoodScan.id == "")
+        else:
+            query = query.filter(FoodScan.user_id == current.id, FoodScan.workspace_id.is_(None))
+        scan = query.first()
         if scan is None:
             raise HTTPException(status_code=404, detail="Scan not found")
         if vision is None and scan.vision is not None:
@@ -87,8 +92,20 @@ def create_assessment(
 
 
 @router.get("/{scan_id}", response_model=AssessmentResponse)
-def get_assessment(scan_id: str, db: Session = Depends(get_db), current: User = Depends(get_current_user)):
-    scan = db.query(FoodScan).filter(FoodScan.id == scan_id, FoodScan.user_id == current.id).first()
+def get_assessment(
+    scan_id: str,
+    db: Session = Depends(get_db),
+    current: User = Depends(get_current_user),
+    workspace_mode: str = Header(default="personal", alias="X-Workspace-Mode"),
+    workspace_id: str | None = Header(default=None, alias="X-Workspace-Id"),
+):
+    scope = get_workspace_scope(db, current, workspace_mode, workspace_id)
+    query = db.query(FoodScan).filter(FoodScan.id == scan_id)
+    if scope[0] == "business":
+        query = query.filter(FoodScan.workspace_id == scope[1]) if scope[1] else query.filter(FoodScan.id == "")
+    else:
+        query = query.filter(FoodScan.user_id == current.id, FoodScan.workspace_id.is_(None))
+    scan = query.first()
     if not scan or not scan.assessment:
         raise HTTPException(status_code=404, detail="Assessment not found")
     a = scan.assessment

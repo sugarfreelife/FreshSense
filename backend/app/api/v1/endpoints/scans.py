@@ -6,7 +6,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, Response, UploadFile, status
+from fastapi import APIRouter, Depends, Form, Header, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -14,6 +14,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
 from app.core.deps import get_current_user, get_db
+from app.core.rate_limit import limit_scan_requests
 from app.ml.vision.inference import predict_image
 from app.models.scan import FinalAssessment, FoodScan, OCRResult, SensorReading, TrackedItem, VisionPrediction
 from app.models.user import User
@@ -22,11 +23,20 @@ from app.ocr.service import extract_text_from_image
 from app.schemas.scan import ScanOut
 from app.services import assessment_service
 from app.services.passport_service import build_passport
+from app.services.workspace_access import get_workspace_scope
+from app.utils.time import utcnow_naive
 from app.utils.files import MAX_FILE_SIZE_BYTES, validate_size
 from app.utils.images import normalize_uploaded_image
 
 router = APIRouter(prefix="/scans", tags=["scans"])
 _BACKEND_DIR = Path(__file__).resolve().parents[4]
+
+
+def _scan_query(db: Session, current: User, workspace_mode: str, workspace_id: str | None):
+    scope = get_workspace_scope(db, current, workspace_mode, workspace_id)
+    if scope[0] == "business":
+        return (db.query(FoodScan).filter(FoodScan.workspace_id == scope[1]) if scope[1] else None), scope
+    return db.query(FoodScan).filter(FoodScan.user_id == current.id, FoodScan.workspace_id.is_(None)), scope
 
 
 def _upload_root() -> Path:
@@ -100,7 +110,9 @@ def _scan_to_out(scan: FoodScan) -> dict:
     return {
         "id": scan.id,
         "image_url": f"/api/v1/scans/{scan.id}/image",
-        "tracked_item_id": scan.tracked_item_id,
+        # Tracked items remain user-private even when the scan is shared with a
+        # business workspace, so do not expose a dangling private item link.
+        "tracked_item_id": scan.tracked_item_id if scan.workspace_id is None else None,
         "tracked_item_label": scan.tracked_item.label if scan.tracked_item else None,
         "food_label": scan.food_label,
         "product": product,
@@ -114,11 +126,18 @@ def _scan_to_out(scan: FoodScan) -> dict:
     }
 
 
-@router.post("", response_model=ScanOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=ScanOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(limit_scan_requests)],
+)
 async def create_scan(
     file: UploadFile,
     db: Session = Depends(get_db),
     current: User = Depends(get_current_user),
+    workspace_mode: str = Header(default="personal", alias="X-Workspace-Mode"),
+    workspace_id: str | None = Header(default=None, alias="X-Workspace-Id"),
     food_type: Annotated[str | None, Form(max_length=100)] = None,
     temperature_c: Annotated[float | None, Form(ge=-40, le=85)] = None,
     humidity_pct: Annotated[float | None, Form(ge=0, le=100)] = None,
@@ -128,6 +147,11 @@ async def create_scan(
     tracked_item_id: Annotated[str | None, Form()] = None,
     new_item_name: Annotated[str | None, Form(max_length=100)] = None,
 ):
+    scope = get_workspace_scope(db, current, workspace_mode, workspace_id)
+    if scope[0] == "business" and scope[1] is None:
+        raise HTTPException(status_code=409, detail="Create or select a business workspace before scanning stock")
+    if scope[0] == "business" and (tracked_item_id or (new_item_name and new_item_name.strip())):
+        raise HTTPException(status_code=400, detail="Tracked scan history is personal; business scans use the shared workspace history.")
     if tracked_item_id and new_item_name and new_item_name.strip():
         raise HTTPException(status_code=400, detail="Choose an existing item or name a new one, not both.")
     tracked_item = None
@@ -186,6 +210,7 @@ async def create_scan(
 
         scan = FoodScan(
             user_id=current.id,
+            workspace_id=scope[1],
             tracked_item_id=tracked_item.id if tracked_item else None,
             image_path=dest_path,
             food_label=food_type.strip() if food_type and food_type.strip() else None,
@@ -263,9 +288,14 @@ def reanalyze_scan(
     scan_id: str,
     db: Session = Depends(get_db),
     current: User = Depends(get_current_user),
+    workspace_mode: str = Header(default="personal", alias="X-Workspace-Mode"),
+    workspace_id: str | None = Header(default=None, alias="X-Workspace-Id"),
 ):
     """Re-read an existing scan photo so improved OCR can update its Passport."""
-    scan = db.query(FoodScan).filter(FoodScan.id == scan_id, FoodScan.user_id == current.id).first()
+    query, scope = _scan_query(db, current, workspace_mode, workspace_id)
+    if scope[0] == "business" and scope[1] is None:
+        raise HTTPException(status_code=409, detail="Select a business workspace first")
+    scan = query.filter(FoodScan.id == scan_id).first() if query is not None else None
     if scan is None:
         raise HTTPException(status_code=404, detail="Scan not found")
     image_path = _resolve_scan_image(scan.image_path)
@@ -283,7 +313,7 @@ def reanalyze_scan(
     scan.ocr.confidence = ocr.get("confidence")
     scan.ocr.expiry_label = ocr.get("expiry_label")
     scan.ocr.expiry_text = ocr.get("expiry_text")
-    scan.ocr.created_at = datetime.utcnow()
+    scan.ocr.created_at = utcnow_naive()
 
     vision = None
     if scan.vision:
@@ -324,7 +354,7 @@ def reanalyze_scan(
     scan.assessment.modalities_used = json.dumps(decision["modalities_used"])
     scan.assessment.expiry_status = decision["expiry_status"]
     scan.assessment.days_remaining = decision["days_remaining"]
-    scan.assessment.created_at = datetime.utcnow()
+    scan.assessment.created_at = utcnow_naive()
 
     db.flush()
     response = _scan_to_out(scan)
@@ -339,8 +369,13 @@ def list_scans(
     current: User = Depends(get_current_user),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    workspace_mode: str = Header(default="personal", alias="X-Workspace-Mode"),
+    workspace_id: str | None = Header(default=None, alias="X-Workspace-Id"),
 ):
-    query = db.query(FoodScan).filter(FoodScan.user_id == current.id)
+    query, scope = _scan_query(db, current, workspace_mode, workspace_id)
+    if query is None:
+        response.headers["X-Total-Count"] = "0"
+        return []
     total = query.count()
     scans = query.order_by(FoodScan.created_at.desc()).offset(offset).limit(limit).all()
     response.headers["X-Total-Count"] = str(total)
@@ -378,8 +413,15 @@ def get_tracked_item(item_id: str, db: Session = Depends(get_db), current: User 
 
 
 @router.get("/{scan_id}/image", include_in_schema=False)
-def get_scan_image(scan_id: str, db: Session = Depends(get_db), current: User = Depends(get_current_user)):
-    scan = db.query(FoodScan).filter(FoodScan.id == scan_id, FoodScan.user_id == current.id).first()
+def get_scan_image(
+    scan_id: str,
+    db: Session = Depends(get_db),
+    current: User = Depends(get_current_user),
+    workspace_mode: str = Header(default="personal", alias="X-Workspace-Mode"),
+    workspace_id: str | None = Header(default=None, alias="X-Workspace-Id"),
+):
+    query, scope = _scan_query(db, current, workspace_mode, workspace_id)
+    scan = query.filter(FoodScan.id == scan_id).first() if query is not None else None
     if scan is None:
         raise HTTPException(status_code=404, detail="Scan not found")
     upload_root = _upload_root()
@@ -393,16 +435,34 @@ def get_scan_image(scan_id: str, db: Session = Depends(get_db), current: User = 
 
 
 @router.get("/{scan_id}", response_model=ScanOut)
-def get_scan(scan_id: str, db: Session = Depends(get_db), current: User = Depends(get_current_user)):
-    scan = db.query(FoodScan).filter(FoodScan.id == scan_id, FoodScan.user_id == current.id).first()
+def get_scan(
+    scan_id: str,
+    db: Session = Depends(get_db),
+    current: User = Depends(get_current_user),
+    workspace_mode: str = Header(default="personal", alias="X-Workspace-Mode"),
+    workspace_id: str | None = Header(default=None, alias="X-Workspace-Id"),
+):
+    query, scope = _scan_query(db, current, workspace_mode, workspace_id)
+    scan = query.filter(FoodScan.id == scan_id).first() if query is not None else None
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found")
     return _scan_to_out(scan)
 
 
 @router.delete("/{scan_id}")
-def delete_scan(scan_id: str, db: Session = Depends(get_db), current: User = Depends(get_current_user)):
-    scan = db.query(FoodScan).filter(FoodScan.id == scan_id, FoodScan.user_id == current.id).first()
+def delete_scan(
+    scan_id: str,
+    db: Session = Depends(get_db),
+    current: User = Depends(get_current_user),
+    workspace_mode: str = Header(default="personal", alias="X-Workspace-Mode"),
+    workspace_id: str | None = Header(default=None, alias="X-Workspace-Id"),
+):
+    query, scope = _scan_query(db, current, workspace_mode, workspace_id)
+    if scope[0] == "business" and scope[1] is None:
+        raise HTTPException(status_code=409, detail="Select a business workspace first")
+    if scope[0] == "business" and scope[2] not in {"owner", "manager"}:
+        raise HTTPException(status_code=403, detail="Only workspace owners and managers can delete shared scans")
+    scan = query.filter(FoodScan.id == scan_id).first() if query is not None else None
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found")
     image_path = _resolve_scan_image(scan.image_path) if scan.image_path else None

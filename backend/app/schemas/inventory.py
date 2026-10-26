@@ -16,6 +16,7 @@ class InventoryItemCreate(BaseModel):
     expiry_source: ExpirySource = "unknown"
     reminder_days_before: Literal[1, 3, 7] | None = None
     storage_location: StorageLocation = "unknown"
+    stock_location: str | None = Field(default=None, max_length=120)
     opened_date: date | None = None
     storage_notes: str | None = Field(default=None, max_length=500)
     source_scan_id: str | None = Field(default=None, max_length=36)
@@ -39,6 +40,7 @@ class InventoryItemUpdate(BaseModel):
     expiry_source: ExpirySource | None = None
     reminder_days_before: Literal[1, 3, 7] | None = None
     storage_location: StorageLocation = "unknown"
+    stock_location: str | None = Field(default=None, max_length=120)
     opened_date: date | None = None
     storage_notes: str | None = Field(default=None, max_length=500)
 
@@ -52,6 +54,7 @@ class InventoryItemOut(BaseModel):
     expiry_source: ExpirySource
     reminder_days_before: int | None = None
     storage_location: StorageLocation = "unknown"
+    stock_location: str | None = None
     opened_date: date | None = None
     storage_notes: str | None = None
     days_remaining: int | None = None

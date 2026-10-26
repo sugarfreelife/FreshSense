@@ -33,8 +33,9 @@ export default function Register() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!e.currentTarget.reportValidity()) return;
     if (!name.trim() || !email.trim() || password.length < 6) {
       push("Enter a name, valid email and a 6+ character password.", "error");
       return;
@@ -57,7 +58,7 @@ export default function Register() {
       <p className="mt-1 text-sm text-slate-500">
         Save scans, track shelf life, and review history.
       </p>
-      <form onSubmit={handleSubmit} className="mt-4 space-y-3" aria-label="Register form">
+      <form noValidate onSubmit={handleSubmit} className="mt-4 space-y-3" aria-label="Register form">
         <label className="block text-sm">
           <span className="text-slate-600">Name</span>
           <input

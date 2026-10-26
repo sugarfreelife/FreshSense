@@ -3,9 +3,11 @@ import { useScans } from "../api/hooks";
 import Layout from "../components/Layout";
 import LoadingSkeleton from "../components/LoadingSkeleton";
 import EmptyState from "../components/EmptyState";
+import { useWorkspaceMode } from "../context/WorkspaceModeContext";
 
 export default function History() {
-  const scansQuery = useScans();
+  const { mode, workspaceId } = useWorkspaceMode();
+  const scansQuery = useScans(mode, workspaceId);
   const scans = scansQuery.data?.pages.flatMap((page) => page.items) ?? [];
   const total = scansQuery.data?.pages[0]?.total ?? 0;
 

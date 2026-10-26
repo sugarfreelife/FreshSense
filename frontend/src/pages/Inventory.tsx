@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { useCreateInventoryItem, useDeleteInventoryItem, useInventory, useUpdateInventoryItem, type InventoryItem } from "../api/hooks";
+import { useBusinessWorkspaces, useCreateInventoryItem, useDeleteInventoryItem, useInventory, useUpdateInventoryItem, type InventoryItem } from "../api/hooks";
 import Layout from "../components/Layout";
 import LoadingSkeleton from "../components/LoadingSkeleton";
+import { useWorkspaceMode } from "../context/WorkspaceModeContext";
+import EvidencePriorityQueue from "../components/EvidencePriorityQueue";
+import BusinessWorkspacePanel from "../components/BusinessWorkspacePanel";
 
 type Filter = "all" | "attention" | "undated";
 
@@ -106,9 +109,12 @@ function InventoryReminders({ items }: { items: InventoryItem[] }) {
 }
 
 function InventoryRow({ item }: { item: InventoryItem }) {
+  const { mode } = useWorkspaceMode();
+  const business = mode === "business";
   const [quantity, setQuantity] = useState(String(item.quantity));
   const [expiryDate, setExpiryDate] = useState(item.expiry_date ?? "");
   const [category, setCategory] = useState(item.category ?? "");
+  const [stockLocation, setStockLocation] = useState(item.stock_location ?? "");
   const [storageNotes, setStorageNotes] = useState(item.storage_notes ?? "");
   const [openedDate, setOpenedDate] = useState(item.opened_date ?? "");
   const update = useUpdateInventoryItem();
@@ -132,7 +138,7 @@ function InventoryRow({ item }: { item: InventoryItem }) {
   };
 
   return (
-    <li className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <li id={`batch-${item.id}`} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -140,12 +146,13 @@ function InventoryRow({ item }: { item: InventoryItem }) {
             {item.category && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{item.category}</span>}
           </div>
           <p className="mt-1 text-sm text-slate-600">{dateLabel(item.expiry_date)} <span className="text-slate-400">/</span> {sourceCopy(item.expiry_source)}</p>
+          <p className="mt-1 text-xs text-slate-500">{business ? "Received" : "Added"} {item.created_at ? new Date(item.created_at).toLocaleDateString() : "date not available"}{item.storage_location && item.storage_location !== "unknown" ? ` · ${item.storage_location.replaceAll("_", " ")}` : ""}{business && item.stock_location ? ` · ${item.stock_location}` : ""}</p>
         </div>
         <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${statusStyle(item.status)}`}>{statusCopy(item)}</span>
       </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-        <label className="block text-xs font-medium text-slate-500">Quantity in this batch
+        <label className="block text-xs font-medium text-slate-500">{business ? "Stock on hand in this batch" : "Quantity in this batch"}
           <input type="number" min={1} max={9999} value={quantity} onChange={(e) => setQuantity(e.target.value)} onBlur={saveQuantity} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); saveQuantity(); e.currentTarget.blur(); } }} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900" aria-label={`Quantity for ${item.product_name}`} />
         </label>
         <label className="block text-xs font-medium text-slate-500">Update package date
@@ -168,6 +175,9 @@ function InventoryRow({ item }: { item: InventoryItem }) {
               <option value="unknown">Not recorded</option><option value="pantry">Pantry</option><option value="refrigerator">Refrigerator</option><option value="freezer">Freezer</option><option value="room_temperature">Room temperature</option><option value="other">Other</option>
             </select>
           </label>
+          {business && <label className="block text-xs font-medium text-slate-600">Branch / stock location
+            <input value={stockLocation} onChange={(event) => setStockLocation(event.target.value)} onBlur={() => { if (stockLocation !== (item.stock_location ?? "")) update.mutate({ id: item.id, stock_location: stockLocation.trim() || null }, { onSuccess: () => setFeedback("Stock location saved."), onError: () => setFeedback("Stock location could not be saved.") }); }} maxLength={120} placeholder="e.g. Store 2 · Cold room" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
+          </label>}
           <label className="block text-xs font-medium text-slate-600">Opened on
             <input type="date" value={openedDate} onChange={(e) => setOpenedDate(e.target.value)} onBlur={() => { if (openedDate !== (item.opened_date ?? "")) update.mutate({ id: item.id, opened_date: openedDate || null }, { onSuccess: () => setFeedback("Opened date saved."), onError: () => setFeedback("Opened date could not be saved.") }); }} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
           </label>
@@ -178,7 +188,7 @@ function InventoryRow({ item }: { item: InventoryItem }) {
             {!item.expiry_date && <span className="mt-1 block font-normal text-slate-500">Add a package date to enable reminders.</span>}
           </label>
           <label className="block text-xs font-medium text-slate-600 sm:col-span-2">Storage or opening notes
-            <textarea value={storageNotes} onChange={(e) => setStorageNotes(e.target.value)} onBlur={() => { if (storageNotes !== (item.storage_notes ?? "")) update.mutate({ id: item.id, storage_notes: storageNotes || null }, { onSuccess: () => setFeedback("Storage notes saved."), onError: () => setFeedback("Storage notes could not be saved.") }); }} maxLength={500} rows={2} placeholder="e.g. Opened Monday; kept on the middle fridge shelf" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
+            <textarea value={storageNotes} onChange={(e) => setStorageNotes(e.target.value)} onBlur={() => { if (storageNotes !== (item.storage_notes ?? "")) update.mutate({ id: item.id, storage_notes: storageNotes || null }, { onSuccess: () => setFeedback("Storage notes saved."), onError: () => setFeedback("Storage notes could not be saved.") }); }} maxLength={500} rows={2} placeholder="e.g. Opened Monday; kept on the middle fridge shelf" className="mt-1 w-full resize-none rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
           </label>
         </div>
       </details>
@@ -189,7 +199,12 @@ function InventoryRow({ item }: { item: InventoryItem }) {
 }
 
 export default function Inventory() {
-  const inventory = useInventory();
+  const { mode, workspaceId, setWorkspaceId } = useWorkspaceMode();
+  const business = mode === "business";
+  const workspacesQuery = useBusinessWorkspaces();
+  const workspaces = workspacesQuery.data ?? [];
+  const activeWorkspace = workspaces.find((workspace) => workspace.id === workspaceId);
+  const inventory = useInventory(mode, workspaceId);
   const create = useCreateInventoryItem();
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
@@ -197,24 +212,34 @@ export default function Inventory() {
   const [category, setCategory] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [expiryDate, setExpiryDate] = useState("");
+  const [stockLocation, setStockLocation] = useState("");
   const [formError, setFormError] = useState("");
+
+  useEffect(() => {
+    if (!business || !workspacesQuery.data) return;
+    if (!workspaceId || !workspaces.some((workspace) => workspace.id === workspaceId)) {
+      setWorkspaceId(workspaces[0]?.id ?? null);
+    }
+  }, [business, workspaces, workspacesQuery.data, workspaceId, setWorkspaceId]);
 
   const items = inventory.data ?? [];
   const summary = useMemo(() => ({
     batches: items.length,
     units: items.reduce((sum, item) => sum + item.quantity, 0),
     attention: items.filter((item) => ["expired", "urgent", "soon"].includes(item.status)).length,
+    expiringUnits: items.filter((item) => item.status === "urgent" || item.status === "soon").reduce((sum, item) => sum + item.quantity, 0),
+    expiredUnits: items.filter((item) => item.status === "expired").reduce((sum, item) => sum + item.quantity, 0),
     undated: items.filter((item) => item.status === "unknown").length
   }), [items]);
   const next = items.find((item) => ["expired", "urgent", "soon"].includes(item.status));
   const needsDate = items.find((item) => item.status === "unknown");
   const insight = next
-    ? `${next.product_name}: ${statusCopy(next).toLowerCase()}. Check the package and plan this batch first.`
+    ? `${next.product_name}: ${statusCopy(next).toLowerCase()}. Check the package and ${business ? "review this stock batch" : "plan this batch"} first.`
     : needsDate
-      ? `${needsDate.product_name} has no date recorded. Check its package and add the date to sharpen your pantry timeline.`
+      ? `${needsDate.product_name} has no date recorded. Check its package and add the date to sharpen your ${business ? "stock timeline" : "pantry timeline"}.`
       : items.length
         ? "Your tracked batches have no label dates due within the next 7 days. FreshSense will update this queue as dates approach."
-        : "Add a scanned purchase to start your expiry watch. FreshSense will sort batches by their recorded package dates.";
+        : `Add a ${business ? "received stock batch" : "scanned purchase"} to start your expiry watch. FreshSense will sort batches by their recorded package dates.`;
 
   const visible = items.filter((item) => {
     const matchesQuery = `${item.product_name} ${item.category ?? ""}`.toLowerCase().includes(query.toLowerCase());
@@ -222,14 +247,15 @@ export default function Inventory() {
     return matchesQuery && matchesFilter;
   });
 
-  const addManual = (event: React.FormEvent) => {
+  const addManual = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!event.currentTarget.reportValidity()) return;
     setFormError("");
     const count = Number(quantity);
     if (!name.trim()) { setFormError("Enter a product name."); return; }
     if (!Number.isInteger(count) || count < 1 || count > 9999) { setFormError("Quantity must be between 1 and 9,999."); return; }
-    create.mutate({ product_name: name.trim(), category: category.trim() || undefined, quantity: count, expiry_date: expiryDate || undefined, expiry_source: expiryDate ? "user_entered" : "unknown" }, {
-      onSuccess: () => { setName(""); setCategory(""); setQuantity("1"); setExpiryDate(""); },
+    create.mutate({ product_name: name.trim(), category: category.trim() || undefined, quantity: count, expiry_date: expiryDate || undefined, expiry_source: expiryDate ? "user_entered" : "unknown", ...(business && stockLocation.trim() ? { stock_location: stockLocation.trim() } : {}) }, {
+      onSuccess: () => { setName(""); setCategory(""); setQuantity("1"); setExpiryDate(""); setStockLocation(""); },
       onError: () => setFormError("Could not save this batch. Check your connection and try again.")
     });
   };
@@ -241,16 +267,16 @@ export default function Inventory() {
           <div className="pointer-events-none absolute -right-10 -top-20 h-64 w-64 rounded-full border border-emerald-400/20" />
           <div className="pointer-events-none absolute -right-3 -top-12 h-48 w-48 rounded-full border border-emerald-400/20" />
           <div className="relative">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-300">FreshSense / Pantry intelligence</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-300">FreshSense / {business ? "Seller stock intelligence" : "Pantry intelligence"}</p>
             <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
               <div>
-                <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Food inventory</h1>
-                <p className="mt-2 max-w-xl text-sm text-slate-300">Every purchase is a batch. Confirm the label date, track its quantity, and see what needs attention next.</p>
+                <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{business ? "Stock & expiry manager" : "Food inventory"}</h1>
+                <p className="mt-2 max-w-xl text-sm text-slate-300">{business ? "Record received stock by batch, see units on hand, and review quantities with package dates due soon." : "Every purchase is a batch. Confirm the label date, track its quantity, and see what needs attention next."}</p>
               </div>
-              <Link to="/scan" className="rounded-xl bg-emerald-400 px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-emerald-300">Scan a purchase</Link>
+              <Link to="/scan" className="rounded-xl bg-emerald-400 px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-emerald-300">{business ? "Scan incoming stock" : "Scan a purchase"}</Link>
             </div>
             <div className="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {[["Batches", summary.batches], ["Units tracked", summary.units], ["Date watch", summary.attention], ["Need a date", summary.undated]].map(([label, value]) => (
+              {(business ? [["Batches", summary.batches], ["Units on hand", summary.units], ["Units due ≤7 days", summary.expiringUnits], ["Units past date", summary.expiredUnits]] : [["Batches", summary.batches], ["Units tracked", summary.units], ["Date watch", summary.attention], ["Need a date", summary.undated]]).map(([label, value]) => (
                 <div key={String(label)} className="rounded-xl border border-white/10 bg-white/[0.06] px-3 py-3 backdrop-blur">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{label}</p>
                   <p className="mt-1 text-2xl font-semibold tabular-nums text-white">{value}</p>
@@ -260,11 +286,22 @@ export default function Inventory() {
           </div>
         </section>
 
+        {business && <BusinessWorkspacePanel
+          workspaces={workspaces}
+          selectedId={workspaceId}
+          onSelect={setWorkspaceId}
+          onCreated={setWorkspaceId}
+        />}
+
+        {business && workspacesQuery.isPending ? <div className="mt-4"><LoadingSkeleton lines={4} /></div>
+          : business && workspacesQuery.isError ? <p role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">Could not load your business workspaces. Check the connection and retry.</p>
+            : business && !activeWorkspace ? null : <>
+
         <section className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 sm:p-5" aria-label="FreshSense Copilot insight">
           <div className="flex items-start gap-3">
             <span aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-800 text-sm text-white">✦</span>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-emerald-900">FreshSense Copilot / Use-next signal</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-emerald-900">FreshSense Copilot / {business ? "Stock review signal" : "Use-next signal"}</p>
               <p className="mt-1 text-sm font-medium text-slate-900">{insight}</p>
               <p className="mt-1 text-xs text-slate-600">Prioritized from dates you confirmed or entered. This is an organizing cue, not a food-safety verdict.</p>
             </div>
@@ -273,24 +310,27 @@ export default function Inventory() {
 
         <InventoryReminders items={items} />
 
+        <EvidencePriorityQueue items={items} business={business} />
+
         <details className="mt-4 rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <summary className="cursor-pointer list-none px-4 py-4 font-semibold text-slate-800 marker:content-none">+ Add a batch manually</summary>
-          <form onSubmit={addManual} className="grid gap-3 border-t border-slate-100 p-4 sm:grid-cols-2">
+          <summary className="cursor-pointer list-none px-4 py-4 font-semibold text-slate-800 marker:content-none">+ {business ? "Receive a stock batch manually" : "Add a batch manually"}</summary>
+          <form noValidate onSubmit={addManual} className="grid gap-3 border-t border-slate-100 p-4 sm:grid-cols-2">
             <label className="text-sm font-medium text-slate-700">Product name<input value={name} onChange={(e) => setName(e.target.value)} maxLength={160} placeholder="e.g. Canned tuna" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
             <label className="text-sm font-medium text-slate-700">Category<input value={category} onChange={(e) => setCategory(e.target.value)} maxLength={80} placeholder="e.g. Canned food" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
-            <label className="text-sm font-medium text-slate-700">Quantity purchased<input type="number" min={1} max={9999} value={quantity} onChange={(e) => setQuantity(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
+            <label className="text-sm font-medium text-slate-700">{business ? "Units received" : "Quantity purchased"}<input type="number" min={1} max={9999} value={quantity} onChange={(e) => setQuantity(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>
             <label className="text-sm font-medium text-slate-700">Expiry / best-before date<input type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /><span className="mt-1 block text-xs font-normal text-slate-500">Leave blank if there is no readable date.</span></label>
+            {business && <label className="text-sm font-medium text-slate-700">Branch / stock location<input value={stockLocation} onChange={(e) => setStockLocation(e.target.value)} maxLength={120} placeholder="e.g. Store 2 · Cold room" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label>}
             {formError && <p role="alert" className="text-sm text-rose-700 sm:col-span-2">{formError}</p>}
-            <button type="submit" disabled={create.isPending} className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60 sm:col-span-2">{create.isPending ? "Saving batch…" : "Add batch"}</button>
+            <button type="submit" disabled={create.isPending} className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60 sm:col-span-2">{create.isPending ? "Saving batch…" : business ? "Receive stock" : "Add batch"}</button>
           </form>
         </details>
 
         <div className="mt-7 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-xl font-bold text-slate-900">Tracked batches</h2>
-            <p className="mt-1 text-sm text-slate-500">A different purchase can have a different expiry date.</p>
+            <h2 className="text-xl font-bold text-slate-900">{business ? "Stock batches" : "Tracked batches"}</h2>
+            <p className="mt-1 text-sm text-slate-500">{business ? "Each delivery lot keeps its own count and package date." : "A different purchase can have a different expiry date."}</p>
           </div>
-          <label className="sr-only" htmlFor="inventory-search">Search pantry</label>
+          <label className="sr-only" htmlFor="inventory-search">{business ? "Search stock" : "Search pantry"}</label>
           <input id="inventory-search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search products" className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm sm:w-56" />
         </div>
 
@@ -311,6 +351,7 @@ export default function Inventory() {
         ) : (
           <ul className="mt-4 space-y-3">{visible.map((item) => <InventoryRow key={item.id} item={item} />)}</ul>
         )}
+            </>}
       </div>
     </Layout>
   );

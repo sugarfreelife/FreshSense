@@ -114,24 +114,46 @@ def _read_easyocr(image_path: str) -> tuple[str, float | None]:
     with Image.open(image_path) as source:
         image = source.convert("RGB")
         width, height = image.size
-        # Read the expiry stamp and its compact printed date separately. Each
-        # crop is enlarged so the stamped characters fill more of the OCR view.
+        # Keep the OCR views small enough for CPU inference. Upscaling a full
+        # package crop 3x and a date crop 5x made a single scan needlessly slow.
         stamp = image.crop((int(width * .12), int(height * .25), int(width * .72), int(height * .72)))
-        stamp = stamp.resize((stamp.width * 3, stamp.height * 3))
+        stamp.thumbnail((1600, 1600), Image.Resampling.LANCZOS)
         date_area = image.crop((int(width * .47), int(height * .38), int(width * .65), int(height * .54)))
-        date_area = date_area.resize((date_area.width * 5, date_area.height * 5))
+        date_area.thumbnail((640, 640), Image.Resampling.LANCZOS)
+        if max(date_area.size) < 960:
+            scale = min(2, 960 / max(date_area.size))
+            date_area = date_area.resize(
+                (max(1, int(date_area.width * scale)), max(1, int(date_area.height * scale))),
+                Image.Resampling.LANCZOS,
+            )
+        stamp_view = np.array(stamp)
+        date_view = np.array(date_area)
+        stamp.close()
+        date_area.close()
+        image.close()
 
     stamp_results = _easy_reader.readtext(
-        np.array(stamp), detail=1, paragraph=False, mag_ratio=2.5,
+        stamp_view, detail=1, paragraph=False, mag_ratio=1.4,
         low_text=0.25, text_threshold=0.45, link_threshold=0.3,
     )
     date_results = _easy_reader.readtext(
-        np.array(date_area), detail=1, paragraph=False, mag_ratio=2.5,
+        date_view, detail=1, paragraph=False, mag_ratio=1.4,
         low_text=0.25, text_threshold=0.45, link_threshold=0.3,
-        rotation_info=[90, 180, 270],
     )
     stamp_text = "\n".join(str(result[1]) for result in stamp_results) if stamp_results else ""
     date_text = "\n".join(str(result[1]) for result in date_results) if date_results else ""
+    if not extract_expiry_date(date_text)["date_detected"]:
+        # Rotated inference is an expensive recovery path; use it only when the
+        # normal date crop did not contain a parseable date.
+        rotated_results = _easy_reader.readtext(
+            date_view, detail=1, paragraph=False, mag_ratio=1.4,
+            low_text=0.25, text_threshold=0.45, link_threshold=0.3,
+            rotation_info=[90, 270],
+        )
+        rotated_text = "\n".join(str(result[1]) for result in rotated_results) if rotated_results else ""
+        if _candidate_score(rotated_text, None) > _candidate_score(date_text, None):
+            date_results = rotated_results
+            date_text = rotated_text
     # The label and date may be detected in different views of the same stamp.
     text = "\n".join(part for part in (stamp_text, date_text) if part)
     stamp_label = next(

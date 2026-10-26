@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
 import ResultCard from "./components/ResultCard";
 import { ToastProvider } from "./components/Toast";
+import { WorkspaceModeProvider } from "./context/WorkspaceModeContext";
 
 function renderApp(initialEntries: string[]) {
   const qc = new QueryClient({
@@ -14,7 +15,9 @@ function renderApp(initialEntries: string[]) {
     <QueryClientProvider client={qc}>
       <MemoryRouter initialEntries={initialEntries}>
         <ToastProvider>
-          <App />
+          <WorkspaceModeProvider>
+            <App />
+          </WorkspaceModeProvider>
         </ToastProvider>
       </MemoryRouter>
     </QueryClientProvider>
@@ -22,10 +25,10 @@ function renderApp(initialEntries: string[]) {
 }
 
 describe("routing", () => {
-  it("renders landing page with Start Scan CTA", () => {
+  it("renders the landing page with a workspace creation CTA", () => {
     renderApp(["/"]);
-    expect(screen.getByRole("heading", { name: /freshsense ai/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /start scan/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /every package date/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /create your workspace/i })).toBeInTheDocument();
   });
 
   it("renders login page", () => {

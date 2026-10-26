@@ -1,12 +1,13 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import assessments, auth, health, inventory, ocr, predictions, scans, sensors
+from app.api.v1.endpoints import assessments, auth, health, inventory, ocr, predictions, scans, sensors, workspaces
 
 router = APIRouter()
 router.include_router(health.router)
 router.include_router(auth.router)
 router.include_router(scans.router)
 router.include_router(inventory.router)
+router.include_router(workspaces.router)
 router.include_router(predictions.router)
 router.include_router(ocr.router)
 router.include_router(sensors.router)

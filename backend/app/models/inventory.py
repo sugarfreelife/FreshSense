@@ -5,6 +5,7 @@ from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Integer, Str
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+from app.utils.time import utcnow_naive
 
 
 def _uuid() -> str:
@@ -25,6 +26,9 @@ class InventoryItem(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    workspace_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("business_workspaces.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     source_scan_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("food_scans.id", ondelete="SET NULL"), nullable=True, index=True
     )
@@ -35,9 +39,11 @@ class InventoryItem(Base):
     expiry_source: Mapped[str] = mapped_column(String(24), nullable=False, default="unknown")
     reminder_days_before: Mapped[int | None] = mapped_column(Integer, nullable=True)
     storage_location: Mapped[str] = mapped_column(String(40), nullable=False, default="unknown")
+    stock_location: Mapped[str | None] = mapped_column(String(120), nullable=True)
     opened_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     storage_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow_naive)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow_naive, onupdate=utcnow_naive)
 
     source_scan = relationship("FoodScan", lazy="joined")
+    workspace = relationship("BusinessWorkspace", back_populates="inventory_items")

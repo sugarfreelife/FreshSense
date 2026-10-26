@@ -5,6 +5,7 @@ from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+from app.utils.time import utcnow_naive
 
 
 def _uuid() -> str:
@@ -16,13 +17,16 @@ class FoodScan(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    workspace_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("business_workspaces.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     tracked_item_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("tracked_items.id", ondelete="SET NULL"), nullable=True, index=True
     )
     image_path: Mapped[str] = mapped_column(String(1024), nullable=False)
     food_label: Mapped[str | None] = mapped_column(String(255), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
 
     vision: Mapped["VisionPrediction | None"] = relationship(back_populates="scan", cascade="all, delete-orphan", uselist=False)
     ocr: Mapped["OCRResult | None"] = relationship(back_populates="scan", cascade="all, delete-orphan", uselist=False)
@@ -31,6 +35,7 @@ class FoodScan(Base):
         back_populates="scan", cascade="all, delete-orphan", lazy="selectin"
     )
     tracked_item: Mapped["TrackedItem | None"] = relationship(back_populates="scans", lazy="joined")
+    workspace = relationship("BusinessWorkspace")
 
 
 class TrackedItem(Base):
@@ -39,7 +44,7 @@ class TrackedItem(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     label: Mapped[str] = mapped_column(String(100), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
 
     scans: Mapped[list[FoodScan]] = relationship(back_populates="tracked_item")
 
@@ -56,7 +61,7 @@ class VisionPrediction(Base):
     model_type: Mapped[str] = mapped_column(String(50), nullable=False)
     confidence_kind: Mapped[str] = mapped_column(String(50), default="heuristic_score", nullable=False)
     visual_evidence: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
 
     scan: Mapped[FoodScan] = relationship(back_populates="vision")
 
@@ -73,7 +78,7 @@ class OCRResult(Base):
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     expiry_label: Mapped[str | None] = mapped_column(String(50), nullable=True)
     expiry_text: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
 
     scan: Mapped[FoodScan] = relationship(back_populates="ocr")
 
@@ -88,7 +93,7 @@ class SensorReading(Base):
     temperature: Mapped[float | None] = mapped_column(Float, nullable=True)
     humidity: Mapped[float | None] = mapped_column(Float, nullable=True)
     source: Mapped[str] = mapped_column(String(30), default="user_entered", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
 
     scan: Mapped[FoodScan | None] = relationship(back_populates="sensor_readings")
 
@@ -105,7 +110,7 @@ class FinalAssessment(Base):
     modalities_used: Mapped[str] = mapped_column(Text, default="[]", nullable=False)  # JSON-encoded list
     expiry_status: Mapped[str] = mapped_column(String(50), nullable=False)
     days_remaining: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
 
     scan: Mapped[FoodScan] = relationship(back_populates="assessment")
 
@@ -117,4 +122,4 @@ class ModelVersion(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     version: Mapped[str] = mapped_column(String(100), nullable=False)
     model_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
