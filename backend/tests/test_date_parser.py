@@ -37,3 +37,9 @@ def test_no_date_never_fabricates():
     out = extract_expiry_date("Fresh apples, tasty!")
     assert out["date_detected"] is False
     assert out["expiry_date"] is None
+
+
+def test_rejects_implausible_year_read_from_ocr_noise():
+    out = extract_expiry_date("EXP 15 JAN 9027")
+    assert out["date_detected"] is False
+    assert out["expiry_date"] is None

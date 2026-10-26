@@ -47,6 +47,13 @@ def _parse(value: str) -> date | None:
     return None
 
 
+def _supported_year(value: date | None) -> date | None:
+    """Reject OCR noise that looks like a syntactically valid distant year."""
+    if value is None or not 1900 <= value.year <= 2100:
+        return None
+    return value
+
+
 def extract_expiry_date(text: str) -> dict:
     """Return a date only when it follows an expiry/best-before label.
 
@@ -55,7 +62,7 @@ def extract_expiry_date(text: str) -> dict:
     presented as the expiry date.
     """
     for match in _EXPIRY_LABEL.finditer(text or ""):
-        expiry = _parse(match.group(1))
+        expiry = _supported_year(_parse(match.group(1)))
         if expiry:
             label = match.group(0).split(match.group(1), 1)[0].strip(" :#-\t")
             return {
@@ -103,7 +110,7 @@ def extract_expiry_date(text: str) -> dict:
     # Date-only fallback is safe only when there is exactly one date candidate.
     matches = list(re.finditer(_DATE, text or "", re.I))
     if len(matches) == 1:
-        expiry = _parse(matches[0].group(0))
+        expiry = _supported_year(_parse(matches[0].group(0)))
         if expiry:
             return {"expiry_date": expiry, "date_detected": True, "expiry_label": "unlabeled date", "expiry_text": matches[0].group(0)}
     return {"expiry_date": None, "date_detected": False, "expiry_label": None, "expiry_text": None}

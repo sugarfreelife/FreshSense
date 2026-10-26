@@ -58,10 +58,37 @@ def _read_tesseract(image_path: str, command: str) -> tuple[str, float | None]:
 
         quick_text, quick_confidence = read_candidate(quick, 6)
         quick_parse = extract_expiry_date(quick_text)
+        # A date read next to an explicit package instruction (EXP, USE BY,
+        # BEST BEFORE, etc.) is stronger evidence than the image-wide average
+        # confidence. Large photos often contain lots of irrelevant text that
+        # pulls that average down. Avoid four costly full-image retries when
+        # the labelled date is already parseable.
+        if quick_parse["date_detected"] and quick_parse.get("expiry_label") != "unlabeled date":
+            return quick_text, quick_confidence
         # Most clear package labels are solved in one OCR pass. Keep the heavier
         # multi-view retry for small, angled, or low-contrast stamps.
         if quick_parse["date_detected"] and (quick_confidence or 0) >= 0.72 and len(quick_text) >= 18:
             return quick_text, quick_confidence
+
+        # Package dates commonly sit in a label around the middle of the
+        # product. A focused crop gives Tesseract a useful scale/layout before
+        # falling back to several expensive full-frame enhancement passes.
+        width, height = gray.size
+        focused = gray.crop(
+            (int(width * 0.22), int(height * 0.20), int(width * 0.78), int(height * 0.82))
+        )
+        scale = min(2.0, 1600 / max(focused.size))
+        if scale > 1:
+            focused = focused.resize(
+                (max(1, int(focused.width * scale)), max(1, int(focused.height * scale)))
+            )
+        for page_mode in (6, 11):
+            focused_text, focused_confidence = read_candidate(focused, page_mode)
+            focused_parse = extract_expiry_date(focused_text)
+            if focused_parse["date_detected"] and focused_parse.get("expiry_label") != "unlabeled date":
+                focused.close()
+                return focused_text, focused_confidence
+        focused.close()
 
         enlarged = gray.resize((gray.width * 2, gray.height * 2))
         variants = (
@@ -207,7 +234,13 @@ def extract_text_from_image(image_path: str, raw_text_override: str | None = Non
         ("", None),
     )
     tesseract_parsed = extract_expiry_date(tesseract_text)
-    if not command or not tesseract_parsed["date_detected"] or (tesseract_confidence or 0) < 0.55:
+    has_labelled_date = (
+        tesseract_parsed["date_detected"]
+        and tesseract_parsed.get("expiry_label") != "unlabeled date"
+    )
+    if not command or not tesseract_parsed["date_detected"] or (
+        (tesseract_confidence or 0) < 0.55 and not has_labelled_date
+    ):
         try:
             raw_text, confidence = _read_easyocr(image_path)
             candidates.append((raw_text, confidence, "easyocr"))
