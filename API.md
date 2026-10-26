@@ -1,7 +1,7 @@
 # API (`/api/v1`, OpenAPI at `/docs`)
 
 - `GET /health` → `{status}`
-- `POST /auth/register` `{email, name?, password(min 6, max 72)}` → 201 `{access_token, token_type, user}` · `POST /auth/login` → `{access_token, token_type, user}` · `GET /auth/me` (Bearer)
+- `POST /auth/register` `{email, name?, password(min 6, max 72)}` → 201 `{access_token, token_type, user}` · `POST /auth/login` → `{access_token, token_type, user}` · `GET /auth/me` (Bearer) · `POST /auth/logout` (cookie sessions require CSRF; revokes the current cookie and/or bearer token until expiry)
 - `POST /scans` (Bearer, multipart field `file` ≤10MB verified via PIL; optional `food_type, temperature_c, humidity_pct, voc_index, notes, tracked_item_id, new_item_name`) → full assessment + persisted IDs. In Seller mode, pass `X-Workspace-Mode: business` and a member `X-Workspace-Id`; the scan and private image are shared with that workspace.
 - `GET /scans?limit=20&offset=0` → scan array with `X-Total-Count` header · `GET /scans/{id}` · `DELETE /scans/{id}` · `GET /scans/{id}/image` (Bearer, private image)
 - `GET /scans/items` → this user's tracked items and scan counts · `GET /scans/items/{item_id}` → chronological scans for a longitudinal Passport

@@ -16,3 +16,10 @@ class User(Base):
     name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
+
+
+class RevokedToken(Base):
+    __tablename__ = "revoked_tokens"
+
+    token_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, index=True, nullable=False)

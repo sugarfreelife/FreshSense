@@ -1,17 +1,26 @@
+from datetime import datetime, timezone
+
+import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.auth_cookies import clear_session_cookies, enforce_csrf, set_session_cookies
+from app.core.auth_cookies import SESSION_COOKIE_NAME, clear_session_cookies, enforce_csrf, set_session_cookies
 from app.core.config import settings
-from app.core.deps import get_current_user, get_db
+from app.core.deps import get_current_user, get_db, oauth2_scheme
 from app.core.rate_limit import limit_auth_requests
-from app.core.security import create_access_token, get_password_hash, verify_password
-from app.models.user import User
+from app.core.security import access_token_id, create_access_token, decode_token, get_password_hash, verify_password
+from app.models.user import RevokedToken, User
+from app.utils.time import utcnow_naive
 from app.schemas.auth import AuthResponse, Token, UserCreate, UserLogin, UserOut
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def _token_expiry(token: str) -> datetime:
+    payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+    return datetime.fromtimestamp(payload["exp"], tz=timezone.utc).replace(tzinfo=None)
 
 
 @router.post(
@@ -58,8 +67,23 @@ def login(payload: UserLogin, response: Response, db: Session = Depends(get_db))
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-def logout(request: Request, response: Response):
-    enforce_csrf(request)
+def logout(
+    request: Request,
+    response: Response,
+    bearer_token: str | None = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+):
+    cookie_token = request.cookies.get(SESSION_COOKIE_NAME)
+    if cookie_token:
+        enforce_csrf(request)
+
+    tokens = {token for token in (bearer_token, cookie_token) if token and decode_token(token)}
+    now = utcnow_naive()
+    pruned = db.query(RevokedToken).filter(RevokedToken.expires_at <= now).delete(synchronize_session=False)
+    for token in tokens:
+        db.merge(RevokedToken(token_id=access_token_id(token), expires_at=_token_expiry(token)))
+    if tokens or pruned:
+        db.commit()
     clear_session_cookies(response)
 
 

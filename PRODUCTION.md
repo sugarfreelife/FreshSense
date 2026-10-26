@@ -9,7 +9,7 @@
 - The API container runs as an unprivileged user; its upload volume is writable only by the service account.
 - A static PWA served by Nginx, with SPA route fallback, same-origin `/api/` proxying, content security policy, and basic browser security headers.
 - Production settings reject SQLite and wildcard or non-HTTPS CORS origins. API documentation routes are disabled in production.
-- Browser authentication uses an HttpOnly, Secure, SameSite session cookie in production; state-changing cookie-authenticated requests require a matching CSRF token. The web client does not store access tokens in local storage.
+- Browser authentication uses an HttpOnly, Secure, SameSite session cookie in production; state-changing cookie-authenticated requests require a matching CSRF token. The web client does not store access tokens in local storage. Logout revokes the presented token in the shared database so it cannot be reused until expiry.
 
 ## First deployment
 
@@ -47,6 +47,6 @@ The API uses one container instance and one persistent upload volume. Before inc
 - Business workspaces share stock and scan records with explicit owner/manager/staff membership. Members must already have a FreshSense account; invite emails/acceptance, ownership transfer, supplier records, and consolidated cross-location reporting are not implemented. Stock location is currently a free-text branch/area field.
 - Browser reminders run while the app is open. Background push/email/SMS delivery, billing, support operations, privacy/retention policy, and account recovery need a real service and owner before commercial operation.
 - The deployment stores uploads on one persistent disk volume. Multi-instance deployment requires shared object storage and a retention/deletion policy.
-- Registration and sign-in have per-process IP request limits, and scan analysis has a per-user/IP limit. These counters reset on restart and do not coordinate across replicas; add a shared limiter before scaling. Security still needs an independent review, including session invalidation, password recovery, and incident response. Logout clears the browser cookie; issued JWTs are not individually revoked and remain valid until their expiry.
+- Registration and sign-in have per-process IP request limits, and scan analysis has a per-user/IP limit. These counters reset on restart and do not coordinate across replicas; add a shared limiter before scaling. Security still needs an independent review, account recovery, multi-device session controls, and incident response.
 - Dependency audit on 2026-10-26: `npm audit` and `pip-audit` report zero known vulnerabilities for the frontend and locked Python 3.12 backend dependencies. Backend packages are pinned in `backend/requirements-production.lock`; refresh the lock whenever `requirements-production.txt` changes and review the resulting versions before release.
 - The Python lock pins versions but does not include package hashes. Add hash checking and automate dependency review in CI before a commercial launch.

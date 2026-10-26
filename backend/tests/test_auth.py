@@ -37,9 +37,9 @@ def test_me_unauthorized(client):
 
 def test_browser_session_cookie_and_csrf_protected_logout(client):
     email = _reg(client)
-    session_cookie = client.cookies.get("freshsense_session")
+    session_token = client.cookies.get("freshsense_session")
     csrf_cookie = client.cookies.get("freshsense_csrf")
-    assert session_cookie
+    assert session_token
     assert csrf_cookie
 
     me = client.get("/api/v1/auth/me")
@@ -52,6 +52,20 @@ def test_browser_session_cookie_and_csrf_protected_logout(client):
     logout = client.post("/api/v1/auth/logout", headers={"X-CSRF-Token": csrf_cookie})
     assert logout.status_code == 204
     assert client.get("/api/v1/auth/me").status_code == 401
+    bearer_me = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {session_token}"})
+    assert bearer_me.status_code == 401
+
+
+def test_bearer_logout_revokes_token_without_browser_csrf(client):
+    _reg(client)
+    token = client.cookies.get("freshsense_session")
+    assert token
+    client.cookies.clear()
+
+    logout = client.post("/api/v1/auth/logout", headers={"Authorization": f"Bearer {token}"})
+    assert logout.status_code == 204
+    me = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert me.status_code == 401
 
 
 def test_production_login_uses_secure_httponly_cookie_and_omits_token(client, monkeypatch):

@@ -55,7 +55,7 @@ Seller workspaces provide basic shared stock tracking, but not email invitation/
 
 Scans are paginated (20 per request by default). Uploaded photos are returned through an authenticated, non-cacheable endpoint rather than public static hosting. Apply the new Alembic migration before starting an existing database.
 
-Browser sign-in uses an HttpOnly, SameSite session cookie; production cookies require HTTPS and browser write requests include a CSRF token. The frontend does not persist access tokens in local storage. The OAuth bearer-token endpoint remains available for API clients.
+Browser sign-in uses an HttpOnly, SameSite session cookie; production cookies require HTTPS and browser write requests include a CSRF token. The frontend does not persist access tokens in local storage. Logout revokes the presented access token in the database; the OAuth bearer-token endpoint remains available for API clients.
 
 ## Production deployment (self-hosted)
 

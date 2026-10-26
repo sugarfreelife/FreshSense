@@ -4,8 +4,8 @@ from sqlalchemy.orm import Session
 
 from app.core import database
 from app.core.auth_cookies import SESSION_COOKIE_NAME, enforce_csrf
-from app.core.security import decode_token
-from app.models.user import User
+from app.core.security import access_token_id, decode_token
+from app.models.user import RevokedToken, User
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token", auto_error=False)
 
@@ -39,6 +39,8 @@ def get_current_user(
         token = None
     subject = decode_token(token) if token else None
     if subject is None:
+        raise credentials_exception
+    if db.query(RevokedToken.token_id).filter(RevokedToken.token_id == access_token_id(token)).first():
         raise credentials_exception
     user = db.query(User).filter(User.id == subject).first()
     if user is None:

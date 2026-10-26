@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
 
 import jwt
 from jwt.exceptions import InvalidTokenError
@@ -39,3 +40,8 @@ def decode_token(token: str) -> str | None:
         return str(sub) if sub is not None else None
     except InvalidTokenError:
         return None
+
+
+def access_token_id(token: str) -> str:
+    """Return a one-way identifier suitable for a revocation record."""
+    return sha256(token.encode("utf-8")).hexdigest()
