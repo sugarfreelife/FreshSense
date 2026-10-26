@@ -9,6 +9,50 @@ from app.ocr.date_parser import extract_expiry_date
 
 _easy_reader = None
 _easy_reader_lock = Lock()
+_EXPIRY_LABEL_LINE = re.compile(
+    r"\b(?:exp(?:iry|iration)?|best\s*(?:before|by)|use\s*(?:by|before)|sell\s*by|"
+    r"valid\s*(?:until|through|thru)|bbe|bb)\b",
+    re.I,
+)
+
+
+def _expiry_line_confidence(lines: list[str], line_scores: list[list[float]], parsed: dict) -> float | None:
+    """Score the recognized date and nearby label instead of unrelated package text."""
+    all_scores = [score for scores in line_scores for score in scores if score >= 0]
+    if not all_scores:
+        return None
+    if not parsed.get("date_detected"):
+        return sum(all_scores) / len(all_scores) / 100
+
+    expiry_text = parsed.get("expiry_text")
+    normalized_target = re.sub(r"[^a-z0-9]", "", str(expiry_text or "").lower())
+    date_lines = [
+        index
+        for index, line in enumerate(lines)
+        if normalized_target
+        and normalized_target in re.sub(r"[^a-z0-9]", "", line.lower())
+    ]
+    relevant_lines: set[int] = set()
+    labelled_date_lines: set[int] = set()
+    for index in date_lines:
+        relevant_lines.add(index)
+        if _EXPIRY_LABEL_LINE.search(lines[index]):
+            labelled_date_lines.add(index)
+        if index > 0 and _EXPIRY_LABEL_LINE.search(lines[index - 1]):
+            labelled_date_lines.update((index - 1, index))
+        if index + 1 < len(lines) and _EXPIRY_LABEL_LINE.search(lines[index + 1]):
+            labelled_date_lines.update((index, index + 1))
+
+    if labelled_date_lines:
+        relevant_lines = labelled_date_lines
+    selected_scores = [
+        score
+        for index in sorted(relevant_lines)
+        for score in line_scores[index]
+        if score >= 0
+    ]
+    scores = selected_scores or all_scores
+    return sum(scores) / len(scores) / 100
 
 
 def _tesseract_command() -> str | None:
@@ -42,7 +86,7 @@ def _read_tesseract(image_path: str, command: str) -> tuple[str, float | None]:
                 output_type=pytesseract.Output.DICT,
             )
             lines: dict[tuple[str, str, str], list[str]] = {}
-            scores = []
+            line_scores: dict[tuple[str, str, str], list[float]] = {}
             for index, raw_word in enumerate(data["text"]):
                 word = str(raw_word).strip()
                 if not word:
@@ -51,9 +95,16 @@ def _read_tesseract(image_path: str, command: str) -> tuple[str, float | None]:
                 lines.setdefault(key, []).append(word)
                 score = float(data["conf"][index])
                 if score >= 0:
-                    scores.append(score)
-            text = "\n".join(" ".join(words) for words in lines.values()).strip()
-            confidence = sum(scores) / len(scores) / 100 if scores else None
+                    line_scores.setdefault(key, []).append(score)
+            line_keys = list(lines)
+            line_texts = [" ".join(lines[key]) for key in line_keys]
+            text = "\n".join(line_texts).strip()
+            parsed = extract_expiry_date(text)
+            confidence = _expiry_line_confidence(
+                line_texts,
+                [line_scores.get(key, []) for key in line_keys],
+                parsed,
+            )
             return text, confidence
 
         quick_text, quick_confidence = read_candidate(quick, 6)

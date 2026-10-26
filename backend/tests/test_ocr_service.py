@@ -1,6 +1,16 @@
 from app.ocr import service
 
 
+def test_expiry_confidence_ignores_unrelated_low_confidence_lines():
+    confidence = service._expiry_line_confidence(
+        ["unrelated package noise", "EXP 11/2027"],
+        [[4.0, 9.0, 12.0], [98.0, 96.0]],
+        {"date_detected": True, "expiry_text": "11/2027"},
+    )
+
+    assert confidence == 0.97
+
+
 def test_labelled_expiry_avoids_slow_neural_retry(monkeypatch):
     monkeypatch.setattr(service, "_tesseract_command", lambda: "tesseract")
     monkeypatch.setattr(

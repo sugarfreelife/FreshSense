@@ -20,6 +20,9 @@ export default function InventoryAddFromScan({ scan }: { scan: Scan }) {
   const [error, setError] = useState("");
   const createItem = useCreateInventoryItem();
   const [saved, setSaved] = useState(false);
+  const needsDateConfirmation = choice === "confirm_ocr" && !confirmed;
+  const needsManualDate = choice === "enter_date" && !expiryDate;
+  const saveDisabled = createItem.isPending || needsDateConfirmation || needsManualDate;
 
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -131,8 +134,12 @@ export default function InventoryAddFromScan({ scan }: { scan: Scan }) {
         </div>
 
         {error && <p role="alert" className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">{error}</p>}
-        <button type="submit" disabled={createItem.isPending} className="w-full rounded-xl bg-emerald-700 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-60">
-          {createItem.isPending ? (business ? "Recording stock…" : "Saving purchase…") : business ? "Receive stock batch" : "Save to pantry inventory"}
+        <button type="submit" disabled={saveDisabled} className="w-full rounded-xl bg-emerald-700 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60">
+          {createItem.isPending
+            ? business ? "Recording stock…" : "Saving purchase…"
+            : needsDateConfirmation ? "Confirm the package date to continue"
+            : needsManualDate ? "Enter a package date or choose no date"
+            : business ? "Receive stock batch" : "Save to pantry inventory"}
         </button>
       </form>
     </section>
