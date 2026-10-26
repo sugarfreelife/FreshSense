@@ -1,5 +1,7 @@
 import uuid
 
+from app.core.config import settings
+
 
 def _reg(client, email=None):
     email = email or f"u_{uuid.uuid4().hex[:8]}@example.com"
@@ -31,6 +33,42 @@ def test_login_wrong_password(client):
 def test_me_unauthorized(client):
     r = client.get("/api/v1/auth/me")
     assert r.status_code == 401
+
+
+def test_browser_session_cookie_and_csrf_protected_logout(client):
+    email = _reg(client)
+    session_cookie = client.cookies.get("freshsense_session")
+    csrf_cookie = client.cookies.get("freshsense_csrf")
+    assert session_cookie
+    assert csrf_cookie
+
+    me = client.get("/api/v1/auth/me")
+    assert me.status_code == 200
+    assert me.json()["email"] == email
+
+    missing_csrf = client.post("/api/v1/auth/logout")
+    assert missing_csrf.status_code == 403
+
+    logout = client.post("/api/v1/auth/logout", headers={"X-CSRF-Token": csrf_cookie})
+    assert logout.status_code == 204
+    assert client.get("/api/v1/auth/me").status_code == 401
+
+
+def test_production_login_uses_secure_httponly_cookie_and_omits_token(client, monkeypatch):
+    monkeypatch.setattr(settings, "ENVIRONMENT", "production")
+    response = client.post(
+        "/api/v1/auth/register",
+        json={"email": f"prod_{uuid.uuid4().hex[:8]}@example.com", "password": "pass1234"},
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["access_token"] is None
+    cookies = response.headers.get_list("set-cookie")
+    session_cookie = next(value for value in cookies if value.startswith("freshsense_session="))
+    csrf_cookie = next(value for value in cookies if value.startswith("freshsense_csrf="))
+    assert "httponly" in session_cookie.lower()
+    assert "secure" in session_cookie.lower()
+    assert "samesite=strict" in session_cookie.lower()
+    assert "secure" in csrf_cookie.lower()
 
 
 def test_login_rate_limit_returns_retry_after(client):

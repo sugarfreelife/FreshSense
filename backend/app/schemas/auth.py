@@ -53,8 +53,8 @@ class Token(BaseModel):
 
 
 class AuthResponse(BaseModel):
-    """Returned by register (auto-login) and login. Matches frontend AuthResponseSchema."""
+    """Browser sessions use cookies; access tokens remain for local API clients."""
 
-    access_token: str
+    access_token: str | None = None
     token_type: str = "bearer"
     user: "UserOut"

@@ -1,7 +1,7 @@
 import { type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { setToken } from "../api/client";
+import { apiClient } from "../api/client";
 import { useToast } from "./Toast";
 import BottomNav from "./BottomNav";
 import { useWorkspaceMode } from "../context/WorkspaceModeContext";
@@ -32,8 +32,13 @@ export default function Layout({
   const { push } = useToast();
   const { mode, setMode } = useWorkspaceMode();
 
-  const handleLogout = () => {
-    setToken(null);
+  const handleLogout = async () => {
+    try {
+      await apiClient.post("/auth/logout");
+    } catch {
+      push("Could not sign out. Check your connection and try again.", "error");
+      return;
+    }
     queryClient.clear();
     push("Signed out.", "info");
     navigate("/login");
@@ -59,7 +64,7 @@ export default function Layout({
                 ))}
               </div>
             </div>
-            <button type="button" onClick={handleLogout} className="rounded-md px-2 py-1 text-sm text-slate-600 hover:text-slate-900">Sign out</button>
+            <button type="button" onClick={() => void handleLogout()} className="rounded-md px-2 py-1 text-sm text-slate-600 hover:text-slate-900">Sign out</button>
           </div>}
         </div>
       </header>

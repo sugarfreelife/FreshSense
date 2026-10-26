@@ -7,7 +7,7 @@ import {
   type UseQueryResult
 } from "@tanstack/react-query";
 import { z } from "zod";
-import { apiClient, setToken } from "./client";
+import { apiClient } from "./client";
 import type { WorkspaceMode } from "../context/WorkspaceModeContext";
 
 /* ---------- Schemas ---------- */
@@ -20,7 +20,7 @@ export const UserSchema = z.object({
 export type User = z.infer<typeof UserSchema>;
 
 const AuthResponseSchema = z.object({
-  access_token: z.string(),
+  access_token: z.string().nullable().optional(),
   token_type: z.string().optional().default("bearer"),
   user: UserSchema.optional()
 });
@@ -442,7 +442,6 @@ export function useLogin(): UseMutationResult<AuthResponse, Error, LoginInput> {
     },
     onSuccess: (data) => {
       qc.removeQueries();
-      setToken(data.access_token);
       if (data.user) qc.setQueryData(["me"], data.user);
       else void qc.invalidateQueries({ queryKey: ["me"] });
     }
@@ -464,7 +463,6 @@ export function useRegister(): UseMutationResult<AuthResponse, Error, RegisterIn
     },
     onSuccess: (data) => {
       qc.removeQueries();
-      setToken(data.access_token);
       if (data.user) qc.setQueryData(["me"], data.user);
       else void qc.invalidateQueries({ queryKey: ["me"] });
     }
