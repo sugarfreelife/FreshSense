@@ -58,6 +58,8 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: backend/requirements-production.lock
+      - name: Install Tesseract OCR
+        run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends tesseract-ocr
       - run: python -m pip install -r backend/requirements-production.lock pytest httpx pip-audit
       - run: python -m pip_audit -r backend/requirements-production.lock
       - run: alembic upgrade head

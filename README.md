@@ -70,7 +70,7 @@ This supports a single self-hosted application instance. Back up both named volu
 | Component | Status |
 |---|---|
 | Vision | Interpretable image features; uses a reviewed, locally trained logistic model when `models/vision_model.json` exists, otherwise discloses the prototype fallback |
-| OCR date parser | real regex; OCR engine optional (EasyOCR/Paddle = Phase 2), never fabricates dates |
+| Package OCR | Tesseract reads printed labels; an optional EasyOCR retry handles uncertain reads; the date parser accepts labeled formats, rejects implausible years, and asks for review when evidence is incomplete |
 | Fusion/decision | deterministic Phase-1 engine, missing-modality safe |
 | Shelf-life regression | Phase 2 (`STATUS: MODEL TRAINING REQUIRED`) |
 | Hardware/ESP32 | API + abstraction ready, calibration Phase 2 |
