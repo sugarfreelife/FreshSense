@@ -48,6 +48,8 @@ build/
 *.db
 *.sqlite
 *.sqlite3
+# Disposable session metadata from in-memory database tooling (invalid on Windows).
+**/:memory:.ses
 
 # Alembic runtime (keep alembic/versions committed)
 alembic/__pycache__/
