@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FreshSense AI — Project Review Guide</title>
+<style>
+@page { size: A4; margin: 17mm 18mm 17mm; }
+* { box-sizing: border-box; }
+body { font-family: "Liberation Sans", Arial, sans-serif; color: #172b3a; font-size: 10pt; line-height: 1.43; }
+h1,h2,h3,p { margin-top: 0; }
+h1 { font-size: 29pt; line-height: 1.08; margin-bottom: 9pt; letter-spacing: -.5pt; }
+h2 { color: #13745a; font-size: 17pt; margin: 0 0 12pt; }
+h3 { color: #18394a; font-size: 11pt; margin: 0 0 5pt; }
+p { margin-bottom: 8pt; }
+ul,ol { margin: 4pt 0 10pt; padding-left: 19pt; }
+li { margin-bottom: 4pt; }
+.cover { height: 245mm; padding: 34mm 11mm 15mm; color: #fff; background: #102d3b; position: relative; }
+.cover:after { content: ""; position: absolute; width: 68mm; height: 68mm; right: 5mm; top: 11mm; border: 1.2mm solid #32bf83; border-radius: 50%; opacity: .8; }
+.eyebrow { font-size: 10pt; letter-spacing: 2pt; text-transform: uppercase; color: #8ce0b7; font-weight: bold; margin-bottom: 19pt; }
+.cover h1 { color: #fff; font-size: 36pt; max-width: 145mm; }
+.cover .subtitle { color: #d2e6e5; font-size: 16pt; max-width: 143mm; margin: 16pt 0 26pt; }
+.cover .rule { height: 2px; width: 38mm; background: #32bf83; margin: 24pt 0; }
+.cover .small { color: #bad0d3; font-size: 10pt; }
+.cover .bottom { position: absolute; bottom: 16mm; left: 11mm; color: #bad0d3; font-size: 9pt; }
+.page { page-break-before: always; }
+.lead { color: #46616b; font-size: 12pt; margin-bottom: 15pt; }
+.card { border: 1px solid #d7e4e3; border-left: 4px solid #2ca878; border-radius: 5px; padding: 10pt 12pt; margin: 9pt 0; background: #f6faf8; }
+.grid { width: 100%; border-collapse: separate; border-spacing: 6pt; margin: 0 -6pt 8pt; }
+.grid td { width: 50%; vertical-align: top; background: #f3f8f7; border: 1px solid #d9e6e3; border-radius: 5px; padding: 9pt; }
+.step { display: table; width: 100%; margin: 0 0 9pt; border-bottom: 1px solid #e1e9e8; padding-bottom: 8pt; }
+.num { display: table-cell; vertical-align: top; width: 28pt; color: #19815e; font-size: 17pt; font-weight: bold; }
+.stepbody { display: table-cell; }
+.quote { color: #244c50; font-style: italic; background: #eef6f2; border-left: 3px solid #28a577; padding: 9pt 12pt; margin: 8pt 0 13pt; }
+.badge { display: inline-block; padding: 3pt 7pt; border-radius: 20px; background: #e2f4eb; color: #176744; font-weight: bold; font-size: 8pt; margin-right: 4pt; }
+.warn { background: #fff7e8; border-left-color: #d79228; }
+.muted { color: #62757c; font-size: 8.7pt; }
+table.matrix { width: 100%; border-collapse: collapse; margin: 8pt 0 12pt; font-size: 9pt; }
+.matrix th { text-align: left; background: #173a48; color: white; padding: 7pt; }
+.matrix td { border-bottom: 1px solid #dce6e4; vertical-align: top; padding: 7pt; }
+.matrix tr:nth-child(even) td { background: #f5f8f7; }
+.code { font-family: "Liberation Mono", monospace; font-size: 9.5pt; background: #eef3f4; padding: 7pt 10pt; border-radius: 4px; }
+.footer { border-top: 1px solid #d9e3e2; color: #718188; font-size: 8pt; margin-top: 15pt; padding-top: 5pt; }
+</style>
+</head>
+<body>
+<section class="cover">
+  <div class="eyebrow">Project review field guide</div>
+  <h1>FreshSense AI</h1>
+  <div class="subtitle">A transparent prototype for food freshness assessment using image, optional sensor, and expiry-date evidence.</div>
+  <div class="rule"></div>
+  <p>How to introduce the project, demonstrate its current workflow, explain its technical design, and discuss its evidence responsibly.</p>
+  <div class="bottom">Reviewer walkthrough · Prepared for a live software project review</div>
+</section>
+
+<section class="page">
+  <h2>01 / Start with the problem and contribution</h2>
+  <p class="lead">Open with the user problem, then frame what this implementation contributes today.</p>
+  <div class="quote">“FreshSense brings a food photo, optional environmental readings, and package-date information into one reviewable assessment. Its Freshness Passport is designed to show what evidence contributed, what was missing, and how the recommendation was produced.”</div>
+  <table class="grid"><tr>
+    <td><h3>The problem</h3><p>People often make freshness decisions from incomplete and scattered signals. A visual estimate alone cannot communicate whether other useful evidence was available or how signals might disagree.</p></td>
+    <td><h3>The project idea</h3><p>Present an image estimate alongside optional temperature, humidity, VOC, and expiry evidence in a traceable workflow, rather than hiding the reasoning behind one unexplained label.</p></td>
+  </tr><tr>
+    <td><h3>What is built</h3><p>A React progressive web app, FastAPI backend, PostgreSQL persistence, JWT authentication, image upload/capture flow, scan history, OCR date parsing, sensor API, and deterministic assessment workflow.</p></td>
+    <td><h3>What is being investigated</h3><p>Whether adding expiry and sensor evidence can improve held-out assessments over image-only predictions. This comparison needs paired observations and has not yet been established.</p></td>
+  </tr></table>
+  <div class="card"><b>Suggested framing:</b> Treat the Freshness Passport and evidence-handling workflow as the contribution hypothesis. Do not claim scientific novelty or improved accuracy without a related-work review and a suitable independent evaluation.</div>
+  <h3>One-sentence scope</h3>
+  <p>FreshSense is an academic prototype and decision-support workflow. It is not a certified food-safety tool, and an image cannot establish microbial safety, smell, or internal spoilage.</p>
+  <div class="footer">FreshSense AI · Project review guide</div>
+</section>
+
+<section class="page">
+  <h2>02 / Run a focused live demonstration</h2>
+  <p class="lead">Aim for a 4–6 minute walkthrough. Show one complete path and narrate the evidence boundary.</p>
+  <div class="card"><b>Before the review</b><br>Prepare Node.js/npm, Python dependencies, frontend dependencies, a reachable PostgreSQL database, backend environment settings, and database migrations. Start both services with the project launcher. Use a small, non-sensitive sample food image.</div>
+  <div class="code">Windows: start-dev.cmd<br>macOS/Linux: ./start-dev.sh<br>Any platform: node start-dev.mjs</div>
+  <p>Frontend opens at <b>http://127.0.0.1:5173</b>; API docs are at <b>http://127.0.0.1:8000/docs</b>.</p>
+  <div class="step"><div class="num">1</div><div class="stepbody"><h3>Introduce the landing page</h3><p>Point out the image-first flow and the stated role of sensors and expiry information. Note that analysis runs on the server and requires a connection.</p></div></div>
+  <div class="step"><div class="num">2</div><div class="stepbody"><h3>Sign in or create a review account</h3><p>Authentication uses the backend API. If the review environment is pre-seeded, use the prepared account. Do not display secrets or real user data.</p></div></div>
+  <div class="step"><div class="num">3</div><div class="stepbody"><h3>Create one scan</h3><p>Choose a food photo, optionally enter food type and available temperature, humidity, or VOC readings, then submit. Explain that optional fields are only meaningful when measured and documented; don’t invent readings for the demo.</p></div></div>
+  <div class="step"><div class="num">4</div><div class="stepbody"><h3>Inspect the result and Passport</h3><p>Show the returned freshness label, confidence, recommendation, warnings, and available modalities. Identify which items are model estimates and which are rule-based.</p></div></div>
+  <div class="step"><div class="num">5</div><div class="stepbody"><h3>Close on persistence and transparency</h3><p>Open history, revisit the scan, and optionally show the API schema in <b>/docs</b>. Explain the model status and limitations before taking questions.</p></div></div>
+  <div class="card warn"><b>Demo fallback:</b> If live upload or the database is unavailable, show the landing page and API documentation, then walk through the prepared screenshots or a recorded run. Clearly label this as a fallback; do not imply that a live scan succeeded.</div>
+  <div class="footer">FreshSense AI · Project review guide</div>
+</section>
+
+<section class="page">
+  <h2>03 / Explain how the system fits together</h2>
+  <p class="lead">Describe the end-to-end data path, then show where each responsibility lives.</p>
+  <div class="card"><b>Browser / PWA</b> → <b>FastAPI routes</b> → <b>services</b> (scan, OCR, sensor, assessment) → <b>vision / parsing / deterministic decision</b> → <b>PostgreSQL records</b> → result and history in the frontend</div>
+  <table class="matrix">
+    <tr><th>Layer</th><th>Role to explain</th><th>Review cue</th></tr>
+    <tr><td>React + Vite PWA</td><td>Landing, account screens, dashboard, food camera/upload, optional expiry-label close-up, results, and history.</td><td>Show responsive scan form and online-only inference notice.</td></tr>
+    <tr><td>FastAPI API</td><td>Authentication, image validation, scan and prediction routes, OCR, sensors, assessments, health.</td><td>Open <code>/docs</code>; point to multipart scan and health endpoints.</td></tr>
+    <tr><td>Assessment services</td><td>Compose available evidence and apply deterministic rules for the current decision flow.</td><td>Explain what evidence was present and what was missing.</td></tr>
+    <tr><td>PostgreSQL + SQLAlchemy</td><td>Persist users, scans, image predictions, OCR and sensor records, and assessments.</td><td>Migration ownership is Alembic; keep application and test databases separate.</td></tr>
+    <tr><td>Model interface</td><td>Uses a local candidate artifact if available; otherwise falls back to the explicitly identified prototype path.</td><td>Verify the active configuration before the review; no weights are committed.</td></tr>
+  </table>
+  <h3>Important distinction: inputs, estimates, and rules</h3>
+  <ul>
+    <li><b>Image estimate:</b> prototype heuristic unless a reviewed local model artifact is installed and configured.</li>
+    <li><b>OCR:</b> RapidOCR reads the food photo or an optional close-up of the expiry label. It is best-effort; the supplied angled, watermarked sample did not produce a confirmed date. Raw recognized text is shown, and dates should be checked against the package.</li>
+    <li><b>Sensor values:</b> API and provider abstractions exist; calibrated physical sensor hardware is future work.</li>
+    <li><b>Fusion:</b> deterministic rules today; learned multimodal fusion and shelf-life regression are not implemented.</li>
+  </ul>
+  <div class="footer">FreshSense AI · Project review guide</div>
+</section>
+
+<section class="page">
+  <h2>04 / Present evidence and limits clearly</h2>
+  <p class="lead">A strong review distinguishes functioning software from validated predictive performance.</p>
+  <table class="matrix">
+    <tr><th>Evidence</th><th>What it supports</th><th>What it does not establish</th></tr>
+    <tr><td>End-to-end application workflow and API</td><td>Integration of scan submission, assessment, persistence, and retrieval.</td><td>Accuracy or real-world usefulness of the freshness output.</td></tr>
+    <tr><td>Candidate image experiment</td><td>Training path exercised on a convenience sample; best candidate reported 52.6% accuracy and 53.1% macro recall on 445 held-out AgriFreshNET images.</td><td>Independent benchmark performance. The validation split has been reused during model comparison; results are exploratory. Candidate is inactive.</td></tr>
+    <tr><td>Public image datasets</td><td>Image-only experimentation across produce freshness labels, with source attribution recorded.</td><td>Paired sensor/expiry benefit, packaged-food generalization, or food safety.</td></tr>
+    <tr><td>Fresh and Rotten supplement</td><td>3,200 raw images, 1,600 fresh and 1,600 spoiled, added locally as training-only data.</td><td>Moderately-fresh classification or leakage-safe validation; source lacks that class and reliable session IDs.</td></tr>
+  </table>
+  <div class="card warn"><b>Say this plainly:</b> “The result is an informational estimate, not a safety determination. The strongest model candidate remains inactive; unless a local reviewed artifact is configured, the app uses the labeled prototype fallback.”</div>
+  <h3>Evaluation needed for the next research claim</h3>
+  <ul>
+    <li>Collect independently reviewed freshness labels and paired readings from the same item and capture time.</li>
+    <li>Split by item, batch, or capture session before model tuning; keep groups disjoint.</li>
+    <li>Compare image-only with the current Passport rules on an untouched grouped validation set.</li>
+    <li>Report per-class metrics, especially spoiled recall, confusion matrices, group/sample counts, missing-modality rates, and uncertainty.</li>
+    <li>Review related work before presenting novelty as anything more than a hypothesis.</li>
+  </ul>
+  <p class="muted">The local dataset images, manifest, and model artifacts are ignored by Git and are not bundled with the repository. Preserve dataset attribution and CC BY 4.0 terms when using or redistributing derived material.</p>
+  <div class="footer">FreshSense AI · Project review guide</div>
+</section>
+
+<section class="page">
+  <h2>05 / Close with a review-ready summary</h2>
+  <div class="quote">“The current milestone demonstrates a full-stack freshness-assessment workflow with transparent evidence handling. It establishes an engineering foundation and a reproducible image-training path. The learned model, calibrated sensors, paired-data comparison, and shelf-life prediction remain future validation work.”</div>
+  <h3>Likely reviewer questions</h3>
+  <table class="matrix">
+    <tr><th>Question</th><th>Concise, evidence-aligned response</th></tr>
+    <tr><td>Is the model trained?</td><td>A local candidate was trained, but it remains inactive. The app uses a prototype fallback unless a reviewed artifact is installed and configured.</td></tr>
+    <tr><td>How accurate is it?</td><td>The best candidate reached 52.6% accuracy and 53.1% macro recall on a small reused validation split. Those scores are exploratory, not an independent generalization result.</td></tr>
+    <tr><td>Does sensor fusion improve results?</td><td>That has not been shown. Public image sources lack paired sensor or expiry observations; collecting grouped paired data is the next evaluation step.</td></tr>
+    <tr><td>Can it tell food is safe?</td><td>No. It is an informational assessment and cannot detect microbial hazards or establish safety.</td></tr>
+    <tr><td>What is the novelty?</td><td>The proposed contribution is evidence provenance and conflict-aware presentation in the Freshness Passport. Novelty needs a literature review; effectiveness needs a paired study.</td></tr>
+    <tr><td>What comes next?</td><td>Collect paired, reviewed observations; build a new group-disjoint benchmark; calibrate sensors; compare image-only and Passport outputs; then consider learned fusion and edge deployment.</td></tr>
+  </table>
+  <h3>Final setup checklist</h3>
+  <ul>
+    <li>Confirm `backend/.env` contains valid PostgreSQL URLs and a strong JWT secret; never put credentials in slides or screenshots.</li>
+    <li>Apply migrations, confirm health endpoint, and create a review user or seed data.</li>
+    <li>Start both services with `start-dev.cmd`, `./start-dev.sh`, or `node start-dev.mjs`.</li>
+    <li>Test one small image and verify the result/history route before the review starts.</li>
+    <li>Have a prepared fallback demo and keep the prototype and safety disclaimers visible.</li>
+  </ul>
+  <div class="footer">Project references: README.md · ARCHITECTURE.md · API.md · NOVELTY.md · data/DATASETS.md · backend/AI_MODEL.md</div>
+</section>
+</body>
+</html>

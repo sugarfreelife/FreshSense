@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -29,7 +29,7 @@ def _token_expiry(token: str) -> datetime:
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(limit_auth_requests)],
 )
-def register(payload: UserCreate, response: Response, db: Session = Depends(get_db)):
+def register(payload: UserCreate, response: Response, db: Session = Depends(get_db), client_type: str | None = Header(default=None, alias="X-FreshSense-Client")):
     existing = db.query(User).filter(User.email == payload.email).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -46,22 +46,24 @@ def register(payload: UserCreate, response: Response, db: Session = Depends(get_
         raise HTTPException(status_code=400, detail="Email already registered") from exc
     db.refresh(user)
     token = create_access_token(subject=user.id)
-    set_session_cookies(response, token)
+    if client_type != "native":
+        set_session_cookies(response, token)
     return AuthResponse(
-        access_token=None if settings.ENVIRONMENT == "production" else token,
+        access_token=token if client_type == "native" or settings.ENVIRONMENT != "production" else None,
         user=UserOut.model_validate(user),
     )
 
 
 @router.post("/login", response_model=AuthResponse, dependencies=[Depends(limit_auth_requests)])
-def login(payload: UserLogin, response: Response, db: Session = Depends(get_db)):
+def login(payload: UserLogin, response: Response, db: Session = Depends(get_db), client_type: str | None = Header(default=None, alias="X-FreshSense-Client")):
     user = db.query(User).filter(User.email == payload.email).first()
     if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     token = create_access_token(subject=user.id)
-    set_session_cookies(response, token)
+    if client_type != "native":
+        set_session_cookies(response, token)
     return AuthResponse(
-        access_token=None if settings.ENVIRONMENT == "production" else token,
+        access_token=token if client_type == "native" or settings.ENVIRONMENT != "production" else None,
         user=UserOut.model_validate(user),
     )
 

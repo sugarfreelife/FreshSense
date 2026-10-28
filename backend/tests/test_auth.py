@@ -1,6 +1,8 @@
 import uuid
+from datetime import datetime, timezone
 
 from app.core.config import settings
+from app.core import security
 
 
 def _reg(client, email=None):
@@ -28,6 +30,47 @@ def test_login_wrong_password(client):
     email = _reg(client)
     r = client.post("/api/v1/auth/login", json={"email": email, "password": "wrong"})
     assert r.status_code == 401
+
+
+def test_native_production_session_uses_revocable_bearer_without_cookies(client, monkeypatch):
+    monkeypatch.setattr(settings, "ENVIRONMENT", "production")
+    email = f"native_{uuid.uuid4().hex[:8]}@example.com"
+    headers = {"X-FreshSense-Client": "native"}
+    registration = client.post("/api/v1/auth/register", headers=headers, json={"email": email, "password": "pass1234"})
+    assert registration.status_code == 201
+    assert not registration.headers.get_list("set-cookie")
+    token = registration.json()["access_token"]
+    assert token
+    bearer = {"Authorization": f"Bearer {token}"}
+    assert client.get("/api/v1/auth/me", headers=bearer).status_code == 200
+    assert client.get("/api/v1/scans", headers=bearer).status_code == 200
+    assert client.post("/api/v1/auth/logout", headers=bearer).status_code == 204
+    assert client.get("/api/v1/auth/me", headers=bearer).status_code == 401
+    login = client.post("/api/v1/auth/login", headers=headers, json={"email": email, "password": "pass1234"})
+    assert login.status_code == 200
+    assert not login.headers.get_list("set-cookie")
+    assert client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {login.json()['access_token']}"}).status_code == 200
+
+
+def test_logout_then_login_in_same_second_creates_valid_new_session(client, monkeypatch):
+    fixed_now = datetime.now(timezone.utc).replace(microsecond=0)
+
+    class FrozenClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return fixed_now
+
+    monkeypatch.setattr(security, "datetime", FrozenClock)
+    email = _reg(client)
+    old_token = client.cookies["freshsense_session"]
+    assert client.post("/api/v1/auth/logout", headers={"X-CSRF-Token": client.cookies["freshsense_csrf"]}).status_code == 204
+    login = client.post("/api/v1/auth/login", json={"email": email, "password": "pass1234"})
+    assert login.status_code == 200
+    assert client.cookies["freshsense_session"] != old_token
+    assert client.get("/api/v1/auth/me").status_code == 200
+    assert client.get("/api/v1/scans").status_code == 200
+    assert client.get("/api/v1/inventory").status_code == 200
+    assert client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {old_token}"}).status_code == 401
 
 
 def test_me_unauthorized(client):

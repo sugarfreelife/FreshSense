@@ -108,5 +108,13 @@ def predict_image(image_path: str, model_dir: str | None = None) -> dict:
         model_dir = settings.MODEL_PATH
     artifact_path = Path(model_dir) / TRAINED_MODEL_FILENAME
     if artifact_path.is_file():
-        return _predict_with_artifact(image_path, artifact_path)
-    return heuristic_predict(image_path)
+        prediction = _predict_with_artifact(image_path, artifact_path)
+    else:
+        prediction = heuristic_predict(image_path)
+    from app.ml.vision.product_recognition import recognize_image
+
+    product = recognize_image(image_path)
+    prediction["product_recognition"] = product
+    if product.get("category"):
+        prediction["food_type"] = product["category"]
+    return prediction

@@ -2,6 +2,10 @@
 
 **Product name:** FreshSense AI · a student prototype for traceable food-package assessment and batch-level expiry tracking.
 
+Food identity recognition uses a local pretrained CLIP model. See
+[backend/PRODUCT_RECOGNITION.md](backend/PRODUCT_RECOGNITION.md) for setup and
+limitations. Package details and dates depend on readable label text.
+
 Combines image-based freshness estimates, VOC/environmental sensing (API + ESP32 abstraction), OCR expiry extraction, and deterministic decision rules. A Freshness Passport records the evidence behind each scan; users can link repeat scans to the same named food item and inspect a chronological record of assessments and storage context.
 
 > The “60%” figure in the original Phase-1 plan was an implementation milestone, not measured accuracy or a live readiness score. Assessment is informational, not certified food-safety judgment. Prototype vision output is labeled `prototype`; unfinished fusion and shelf-life features remain research work.
@@ -72,7 +76,7 @@ This supports a single self-hosted application instance. Back up both named volu
 | Component | Status |
 |---|---|
 | Vision | Interpretable image features; uses a reviewed, locally trained logistic model when `models/vision_model.json` exists, otherwise discloses the prototype fallback |
-| Package OCR | Tesseract reads printed labels; an optional EasyOCR retry handles uncertain reads; the date parser accepts labeled formats, rejects implausible years, and asks for review when evidence is incomplete |
+| Package OCR | Tesseract reads printed labels; a local RapidOCR retry straightens difficult stamps and connects dot-matrix print; the date parser accepts labeled formats, rejects implausible years, and asks for review when evidence is incomplete |
 | Fusion/decision | deterministic Phase-1 engine, missing-modality safe |
 | Shelf-life regression | Phase 2 (`STATUS: MODEL TRAINING REQUIRED`) |
 | Hardware/ESP32 | API + abstraction ready, calibration Phase 2 |

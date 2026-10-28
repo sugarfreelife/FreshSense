@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: Literal["HS256", "HS384", "HS512"] = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=60, gt=0)
     MODEL_PATH: str = "./models"
+    PRODUCT_RECOGNITION_ENABLED: bool = True
     UPLOAD_DIR: str = "./uploads"
     OCR_PROVIDER: str = "local"
     CORS_ORIGINS: str = (

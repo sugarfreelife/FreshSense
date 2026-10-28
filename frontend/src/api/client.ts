@@ -1,4 +1,5 @@
 import axios from "axios";
+import { isNativeApp, nativeToken } from "../native/session";
 import { BUSINESS_WORKSPACE_STORAGE_KEY, WORKSPACE_MODE_STORAGE_KEY } from "../context/WorkspaceModeContext";
 
 const LEGACY_TOKEN_KEY = "freshsense_token";
@@ -21,12 +22,12 @@ export function isOnline(): boolean {
 
 const baseURL =
   (import.meta.env.VITE_API_URL as string | undefined) ||
-  "http://127.0.0.1:8000/api/v1";
+  "/api/v1";
 
 export const apiClient = axios.create({
   baseURL,
   timeout: 60000,
-  withCredentials: true
+  withCredentials: !isNativeApp
 });
 
 function readCookie(name: string): string | null {
@@ -39,10 +40,17 @@ function readCookie(name: string): string | null {
   }
 }
 
-apiClient.interceptors.request.use((config) => {
+apiClient.interceptors.request.use(async (config) => {
   config.headers = config.headers ?? {};
+  if (isNativeApp) {
+    config.headers["X-FreshSense-Client"] = "native";
+    const token = await nativeToken();
+    if (token && new URL(config.url || "", config.baseURL).origin === new URL(baseURL).origin) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+  }
   const method = (config.method ?? "get").toLowerCase();
-  if (["post", "put", "patch", "delete"].includes(method)) {
+  if (!isNativeApp && ["post", "put", "patch", "delete"].includes(method)) {
     const csrfToken = readCookie(CSRF_COOKIE_NAME);
     if (csrfToken) config.headers["X-CSRF-Token"] = csrfToken;
   }

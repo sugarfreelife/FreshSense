@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 import uuid
 from datetime import date, datetime
@@ -22,6 +23,8 @@ from app.ocr.product_parser import recognize_product
 from app.ocr.service import extract_text_from_image
 from app.schemas.scan import ScanOut
 from app.services import assessment_service
+from app.services import image_storage
+from app.services.product_service import identify_product
 from app.services.passport_service import build_passport
 from app.services.workspace_access import get_workspace_scope
 from app.utils.time import utcnow_naive
@@ -45,6 +48,8 @@ def _upload_root() -> Path:
 
 
 def _resolve_scan_image(stored_path: str) -> Path:
+    if stored_path.startswith("blob://"):
+        return image_storage.local_copy(stored_path, _upload_root())
     path = Path(stored_path)
     if not path.is_absolute():
         path = _BACKEND_DIR / path
@@ -76,7 +81,7 @@ def _scan_to_out(scan: FoodScan) -> dict:
               "expiry_text": scan.ocr.expiry_text,
             "created_at": scan.ocr.created_at,
         }
-    product = recognize_product((ocr or {}).get("raw_text", ""), user_label=scan.food_label)
+    product = json.loads(scan.product_recognition) if scan.product_recognition else recognize_product((ocr or {}).get("raw_text", ""), user_label=scan.food_label)
     sensor_row = max(scan.sensor_readings, key=lambda reading: reading.created_at, default=None)
     sensor = None
     if sensor_row:
@@ -174,6 +179,7 @@ async def create_scan(
     safe_name = f"{upload_id}.jpg"
     dest_path = str(upload_dir / safe_name)
     original_path = upload_dir / f"{upload_id}.source"
+    stored_path = dest_path
     try:
         try:
             normalize_uploaded_image(contents, dest_path)
@@ -186,8 +192,8 @@ async def create_scan(
             run_in_threadpool(predict_image, dest_path),
             run_in_threadpool(extract_text_from_image, dest_path),
         )
-        product = recognize_product(ocr.get("raw_text", ""), user_label=food_type)
-        if product["category"] and product["source"] == "package_text":
+        product = identify_product(vision.get("product_recognition"), ocr.get("raw_text", ""), user_label=food_type)
+        if product.get("category"):
             vision["food_type"] = product["category"]
         expiry_date = date.fromisoformat(ocr["expiry_date"]) if ocr.get("expiry_date") else None
         sensor_values = {
@@ -208,13 +214,15 @@ async def create_scan(
             db.add(tracked_item)
             db.flush()
 
+        stored_path = await run_in_threadpool(image_storage.persist, Path(dest_path))
         scan = FoodScan(
             user_id=current.id,
             workspace_id=scope[1],
             tracked_item_id=tracked_item.id if tracked_item else None,
-            image_path=dest_path,
+            image_path=stored_path,
             food_label=food_type.strip() if food_type and food_type.strip() else None,
             notes=notes.strip() if notes and notes.strip() else None,
+            product_recognition=json.dumps(product),
         )
         db.add(scan)
         db.flush()
@@ -272,6 +280,11 @@ async def create_scan(
         return response
     except Exception:
         db.rollback()
+        if stored_path.startswith("blob://"):
+            try:
+                await run_in_threadpool(image_storage.remove, stored_path)
+            except Exception:
+                logging.getLogger(__name__).exception("Could not clean up a failed scan's private images")
         try:
             os.remove(dest_path)
         except OSError:
@@ -291,7 +304,7 @@ def reanalyze_scan(
     workspace_mode: str = Header(default="personal", alias="X-Workspace-Mode"),
     workspace_id: str | None = Header(default=None, alias="X-Workspace-Id"),
 ):
-    """Re-read an existing scan photo so improved OCR can update its Passport."""
+    """Refresh image identification and OCR on an existing scan photo."""
     query, scope = _scan_query(db, current, workspace_mode, workspace_id)
     if scope[0] == "business" and scope[1] is None:
         raise HTTPException(status_code=409, detail="Select a business workspace first")
@@ -303,7 +316,10 @@ def reanalyze_scan(
         raise HTTPException(status_code=404, detail="The saved scan photo is no longer available")
 
     ocr = extract_text_from_image(str(image_path))
-    recognized = recognize_product(ocr.get("raw_text", ""), user_label=scan.food_label)
+    from app.ml.vision.product_recognition import recognize_image
+
+    recognized = identify_product(recognize_image(str(image_path)), ocr.get("raw_text", ""), user_label=scan.food_label)
+    scan.product_recognition = json.dumps(recognized)
     if scan.ocr is None:
         scan.ocr = OCRResult(scan_id=scan.id)
     scan.ocr.raw_text = ocr.get("raw_text", "")
@@ -326,7 +342,7 @@ def reanalyze_scan(
             "confidence_kind": scan.vision.confidence_kind,
             "visual_evidence": json.loads(scan.vision.visual_evidence or "{}"),
         }
-        if recognized.get("source") == "package_text" and recognized.get("category"):
+        if recognized.get("category"):
             scan.vision.food_type = recognized["category"]
             vision["food_type"] = recognized["category"]
 
@@ -465,9 +481,12 @@ def delete_scan(
     scan = query.filter(FoodScan.id == scan_id).first() if query is not None else None
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found")
-    image_path = _resolve_scan_image(scan.image_path) if scan.image_path else None
+    stored_path = scan.image_path
+    image_path = (_upload_root() / stored_path.removeprefix("blob://") if stored_path.startswith("blob://") else _resolve_scan_image(stored_path)) if stored_path else None
     db.delete(scan)
     db.commit()
+    if stored_path and stored_path.startswith("blob://"):
+        image_storage.remove(stored_path)
     upload_root = _upload_root()
     if image_path and image_path.is_relative_to(upload_root):
         for path in (image_path, image_path.with_suffix(".source")):

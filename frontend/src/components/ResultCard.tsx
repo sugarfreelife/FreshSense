@@ -56,6 +56,7 @@ function ocrLabel(provider?: string): string {
   switch (provider) {
     case "tesseract": return "Read with Tesseract";
     case "easyocr": return "Read with EasyOCR";
+    case "rapidocr": return "Read with RapidOCR";
     case "manual": return "Text entered manually";
     case "legacy": return "Older scan · needs OCR refresh";
     case "unavailable": return "OCR engine unavailable";
@@ -92,7 +93,9 @@ export default function ResultCard({
       : formatPct(scan.model_score);
   const product = scan.product;
   const productCategory = product?.category ?? null;
-  const productFromImage = product?.source === "package_text";
+  const productFromText = product?.source === "package_text" || product?.source === "image_and_text";
+  const visualProduct = product?.source === "image_model" || product?.source === "image_and_text";
+  const labelDetails = product?.label_details;
   const nextAction = scan.passport?.next_action;
   const nextActionTo = nextAction?.target === "pantry"
     ? "#pantry-entry"
@@ -130,10 +133,15 @@ export default function ResultCard({
 
       <section aria-label="Product recognition" className="overflow-hidden rounded-2xl border border-emerald-200 bg-white">
         <div className="border-b border-emerald-100 bg-emerald-50/70 px-4 py-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-800">Package readout</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-800">Food & product identification</p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <h2 className="text-lg font-bold text-slate-900">{productCategory ?? "Product not identified"}</h2>
-            {productFromImage && (
+            <h2 className="text-lg font-bold text-slate-900">{product?.product_name ?? productCategory ?? "A clearer view is needed"}</h2>
+            {visualProduct && (
+              <span className="rounded-full border border-emerald-200 bg-white px-2.5 py-1 text-xs font-medium text-emerald-800">
+                {product?.status === "uncertain" ? "Possible visual match" : product?.source === "image_and_text" ? "Photo + label text" : "Identified from photo"}
+              </span>
+            )}
+            {product?.source === "package_text" && (
               <span className="rounded-full border border-emerald-200 bg-white px-2.5 py-1 text-xs font-medium text-emerald-800">
                 matched from package text
               </span>
@@ -144,23 +152,26 @@ export default function ResultCard({
               </span>
             )}
           </div>
-          {product?.product_name && product.product_name !== productCategory && (
-            <p className="mt-1 text-sm text-slate-700">{product.product_name}</p>
+          {productCategory && product?.product_name !== productCategory && (
+            <p className="mt-1 text-sm text-slate-700">{productCategory}</p>
           )}
         </div>
         <div className="space-y-3 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-            <span className="text-slate-600">{ocrLabel(scan.ocr_provider)}</span>
-            {productFromImage && product?.confidence != null && (
+            <span className="text-slate-600">{visualProduct ? product?.model : ocrLabel(scan.ocr_provider)}</span>
+            {visualProduct && product?.confidence_kind === "cosine_similarity" && product.confidence != null && (
+              <span className="font-medium text-slate-700">Visual similarity {product.confidence.toFixed(3)} · not a probability</span>
+            )}
+            {productFromText && product?.confidence != null && (
               <span className="font-medium text-slate-700">Text match strength {formatPct(product.confidence)}</span>
             )}
-            {!productFromImage && scan.ocr_confidence != null && (
+            {!productFromText && scan.ocr_confidence != null && (
               <span className="font-medium text-slate-700">Text-read score {formatPct(scan.ocr_confidence)}</span>
             )}
           </div>
           {product?.evidence && product.evidence.length > 0 && (
             <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-900">AI evidence · package words</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-900">Recognition evidence</p>
               <div className="mt-2 flex flex-wrap gap-2" aria-label="Recognition evidence">
                 {product.evidence.map((term) => (
                   <span key={term} className="rounded-md border border-emerald-200 bg-white px-2 py-1 font-mono text-xs text-emerald-950">{term}</span>
@@ -168,6 +179,37 @@ export default function ResultCard({
               </div>
             </div>
           )}
+          {product?.packaging && (
+            <p className="text-sm text-slate-700"><strong>Likely presentation:</strong> {product.packaging}</p>
+          )}
+          {product?.alternatives && product.alternatives.length > 0 && (
+            <details className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <summary className="cursor-pointer text-sm font-medium text-slate-700">Compare visual matches</summary>
+              <ul className="mt-2 space-y-1 text-sm text-slate-600">
+                {product.alternatives.map((candidate, index) => (
+                  <li key={`${candidate.name}-${index}`}>{candidate.name} · similarity {candidate.similarity.toFixed(3)}</li>
+                ))}
+              </ul>
+            </details>
+          )}
+          {labelDetails && (
+            <div className="rounded-xl border border-slate-200 p-3">
+              <p className="text-sm font-semibold text-slate-800">Visible label details</p>
+              <p className="mt-1 text-xs text-slate-500">Read from package text. Check the label before relying on ingredients or allergens.</p>
+              <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+                {([
+                  ["Package size", labelDetails.package_size],
+                  ["Ingredients", labelDetails.ingredients],
+                  ["Allergen statement", labelDetails.allergens],
+                  ["Storage instructions", labelDetails.storage_instructions],
+                  ["Nutrition", labelDetails.nutrition_text]
+                ] as const).map(([title, value]) => (
+                  <div key={title}><dt className="font-medium text-slate-700">{title}</dt><dd className="mt-1 text-slate-600">{value || "Not readable in this photo"}</dd></div>
+                ))}
+              </dl>
+            </div>
+          )}
+          {product?.limitations?.map((limitation) => <p key={limitation} className="text-xs text-slate-500">{limitation}</p>)}
           {!productCategory && (
             <p className="text-sm text-slate-600">
               A clear view of the product name can identify categories such as dairy, bread, canned fish, and drinks.
@@ -186,7 +228,7 @@ export default function ResultCard({
                 disabled={isReanalyzing}
                 className="rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-800 transition-colors hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
               >
-                {isReanalyzing ? "Reading label…" : "Read this label again"}
+                {isReanalyzing ? "Analyzing photo…" : "Analyze photo again"}
               </button>
               {reanalyzeError && <span role="alert" className="text-sm text-red-700">{reanalyzeError}</span>}
             </div>
@@ -231,7 +273,7 @@ export default function ResultCard({
 
       <section className="grid grid-cols-2 gap-3">
         <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Printed expiry date</p>
+          <p className="text-xs uppercase tracking-wide text-slate-500">{scan.expiry_label === "unlabeled date" ? "Printed date · label not visible" : "Printed expiry date"}</p>
           <p className="mt-1 text-sm font-semibold text-slate-800">
               {scan.expiry_date ?? (scan.expiry_text ? `${scan.expiry_text} · year not read` : "Not detected")}
           </p>
@@ -242,7 +284,9 @@ export default function ResultCard({
               <p className="text-xs text-slate-500">Partial stamp read{scan.expiry_label ? ` after “${scan.expiry_label}”` : ""}; no year was detected, so this was not used to calculate expiry.</p>
             )}
           {scan.expiry_date && scan.expiry_label && (
-            <p className="text-xs text-slate-500">Read after “{scan.expiry_label}”</p>
+            <p className="text-xs text-slate-500">{scan.expiry_label === "unlabeled date"
+              ? "Confirm that this stamp is the expiry or best-before date before saving it to your pantry."
+              : `Read after “${scan.expiry_label}”`}</p>
           )}
           {scan.shelf_life_days !== undefined && scan.shelf_life_days !== null && (
             <p className="text-xs text-slate-500">

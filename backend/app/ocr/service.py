@@ -7,8 +7,8 @@ from threading import Lock
 
 from app.ocr.date_parser import extract_expiry_date
 
-_easy_reader = None
-_easy_reader_lock = Lock()
+_rapid_reader = None
+_rapid_reader_lock = Lock()
 _EXPIRY_LABEL_LINE = re.compile(
     r"\b(?:exp(?:iry|iration)?|best\s*(?:before|by)|use\s*(?:by|before)|sell\s*by|"
     r"valid\s*(?:until|through|thru)|bbe|bb)\b",
@@ -160,102 +160,77 @@ def _read_tesseract(image_path: str, command: str) -> tuple[str, float | None]:
     return text, confidence
 
 
-def _read_easyocr(image_path: str) -> tuple[str, float | None]:
-    global _easy_reader
-    import torch
-
-    # Prevent PyTorch from launching dozens of CPU threads on a small OCR job.
-    # On CPU-only Windows machines that oversubscription can make inference
-    # slower than the browser's request timeout.
-    try:
-        torch.set_num_threads(min(4, torch.get_num_threads()))
-        torch.set_num_interop_threads(1)
-    except RuntimeError:
-        pass
-    import easyocr  # type: ignore[import-not-found]
-
-    if _easy_reader is None:
-        with _easy_reader_lock:
-            if _easy_reader is None:
-                model_cache = Path(__file__).resolve().parents[2] / "uploads" / ".easyocr"
-                model_cache.mkdir(parents=True, exist_ok=True)
-                _easy_reader = easyocr.Reader(
-                    ["en"],
-                    gpu=False,
-                    model_storage_directory=str(model_cache),
-                    user_network_directory=str(model_cache / "user_network"),
-                    download_enabled=True,
-                )
-    from PIL import Image
+def _stamp_views(image_path: str):
+    """Straighten dark ink and connect dot-matrix strokes for a bounded retry."""
     import numpy as np
+    from PIL import Image, ImageFilter, ImageOps
 
     with Image.open(image_path) as source:
-        image = source.convert("RGB")
-        width, height = image.size
-        # Keep the OCR views small enough for CPU inference. Upscaling a full
-        # package crop 3x and a date crop 5x made a single scan needlessly slow.
-        stamp = image.crop((int(width * .12), int(height * .25), int(width * .72), int(height * .72)))
-        stamp.thumbnail((1600, 1600), Image.Resampling.LANCZOS)
-        date_area = image.crop((int(width * .47), int(height * .38), int(width * .65), int(height * .54)))
-        date_area.thumbnail((640, 640), Image.Resampling.LANCZOS)
-        if max(date_area.size) < 960:
-            scale = min(2, 960 / max(date_area.size))
-            date_area = date_area.resize(
-                (max(1, int(date_area.width * scale)), max(1, int(date_area.height * scale))),
-                Image.Resampling.LANCZOS,
-            )
-        stamp_view = np.array(stamp)
-        date_view = np.array(date_area)
-        stamp.close()
-        date_area.close()
-        image.close()
+        gray = ImageOps.grayscale(source)
+        gray.thumbnail((900, 900))
+    width, height = gray.size
+    stamp = gray.crop((int(width * .12), int(height * .15), int(width * .88), int(height * .85)))
+    ink = stamp.point(lambda pixel: 0 if pixel < 70 else 255)
+    angles = []
+    for angle in range(-45, 46, 3):
+        rotated = ink.rotate(angle, expand=True, fillcolor=255)
+        rows = (np.asarray(rotated) < 128).sum(axis=1)
+        # Horizontal text concentrates ink into rows once the stamp is level.
+        score = float((rows ** 2).sum() / max(int(rows.sum()), 1))
+        angles.append((score, angle))
+    best_score, angle = max(angles)
+    if best_score == 0:
+        return
+    level_score = next(score for score, candidate in angles if candidate == 0)
+    if best_score < level_score * 1.15:
+        angle = 0
+    for threshold in (95, 70):
+        mask = stamp.point(lambda pixel: 0 if pixel < threshold else 255)
+        joined = mask.filter(ImageFilter.MinFilter(3))
+        view = joined.rotate(angle, expand=True, fillcolor=255)
+        yield view.resize((view.width * 2, view.height * 2))
 
-    stamp_results = _easy_reader.readtext(
-        stamp_view, detail=1, paragraph=False, mag_ratio=1.4,
-        low_text=0.25, text_threshold=0.45, link_threshold=0.3,
-    )
-    date_results = _easy_reader.readtext(
-        date_view, detail=1, paragraph=False, mag_ratio=1.4,
-        low_text=0.25, text_threshold=0.45, link_threshold=0.3,
-    )
-    stamp_text = "\n".join(str(result[1]) for result in stamp_results) if stamp_results else ""
-    date_text = "\n".join(str(result[1]) for result in date_results) if date_results else ""
-    if not extract_expiry_date(date_text)["date_detected"]:
-        # Rotated inference is an expensive recovery path; use it only when the
-        # normal date crop did not contain a parseable date.
-        rotated_results = _easy_reader.readtext(
-            date_view, detail=1, paragraph=False, mag_ratio=1.4,
-            low_text=0.25, text_threshold=0.45, link_threshold=0.3,
-            rotation_info=[90, 270],
-        )
-        rotated_text = "\n".join(str(result[1]) for result in rotated_results) if rotated_results else ""
-        if _candidate_score(rotated_text, None) > _candidate_score(date_text, None):
-            date_results = rotated_results
-            date_text = rotated_text
-    # The label and date may be detected in different views of the same stamp.
-    text = "\n".join(part for part in (stamp_text, date_text) if part)
-    stamp_label = next(
-        (
-            str(result[1])
-            for result in stamp_results
-            if float(result[2]) >= 0.7
-            and re.search(r"\b(?:BEST(?:\s+(?:BEFORE|BY))?|EXP(?:IR(?:Y|ATION))?|USE\s+BY|BBE|BB)\b", str(result[1]), re.I)
-        ),
-        None,
-    )
-    partial_date = next(
-        (
-            str(result[1])
-            for result in date_results
-            if float(result[2]) >= 0.45
-            and re.search(r"\b(?:[0-9OQ]{1,2}\s*[A-Z]{3,9}|[A-Z]{3,9}\s*[0-9OQ]{1,2})\b", str(result[1]), re.I)
-        ),
-        None,
-    )
-    if stamp_label and partial_date:
-        text = f"{text}\n{stamp_label}\n{partial_date}"
-    scores = [float(result[2]) for result in stamp_results + date_results if len(result) > 2]
-    return text, sum(scores) / len(scores) if scores else None
+
+def _read_rapidocr(image_path: str) -> tuple[str, float | None]:
+    global _rapid_reader
+    from rapidocr import RapidOCR
+
+    if _rapid_reader is None:
+        with _rapid_reader_lock:
+            if _rapid_reader is None:
+                # Models ship in the package; scans do not need model downloads.
+                _rapid_reader = RapidOCR(params={
+                    "EngineConfig.onnxruntime.intra_op_num_threads": 2,
+                    "EngineConfig.onnxruntime.inter_op_num_threads": 1,
+                    "Global.log_level": "error",
+                })
+
+    def read(image):
+        output = _rapid_reader(image)
+        lines = list(output.txts or [])
+        scores = [[float(score) * 100] for score in (output.scores or [])]
+        return lines, scores
+
+    lines, scores = read(image_path)
+    text = "\n".join(lines)
+    parsed = extract_expiry_date(text)
+    candidates = [(text, _expiry_line_confidence(lines, scores, parsed))]
+    if parsed["date_detected"]:
+        return candidates[0]
+    for view in _stamp_views(image_path):
+        stamp_lines, stamp_scores = read(view)
+        # Preserve full-frame manufacture labels and other date evidence so a
+        # date-only crop cannot silently turn a production date into expiry.
+        combined_lines = lines + stamp_lines
+        combined_scores = scores + stamp_scores
+        combined = "\n".join(combined_lines)
+        parsed = extract_expiry_date(combined)
+        candidate = (combined, _expiry_line_confidence(combined_lines, combined_scores, parsed))
+        candidates.append(candidate)
+        if parsed["date_detected"]:
+            return candidate
+    return max(candidates, key=lambda candidate: _candidate_score(*candidate))
+
 
 def _candidate_score(text: str, confidence: float | None) -> tuple[int, int, float]:
     parsed = extract_expiry_date(text)
@@ -293,13 +268,13 @@ def extract_text_from_image(image_path: str, raw_text_override: str | None = Non
         (tesseract_confidence or 0) < 0.55 and not has_labelled_date
     ):
         try:
-            raw_text, confidence = _read_easyocr(image_path)
-            candidates.append((raw_text, confidence, "easyocr"))
+            raw_text, confidence = _read_rapidocr(image_path)
+            candidates.append((raw_text, confidence, "rapidocr"))
         except ImportError:
             if not command:
-                errors.append("Install Tesseract OCR or the optional EasyOCR package.")
+                errors.append("Install Tesseract OCR or the RapidOCR package.")
         except Exception:
-            errors.append("EasyOCR could not process the image.")
+            errors.append("RapidOCR could not process the image.")
 
     if candidates:
         raw_text, confidence, provider = max(

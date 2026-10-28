@@ -10,6 +10,19 @@ secrets/
 # ================= Python / FastAPI backend =================
 backend/models/*.json
 backend/models/*.tmp
+backend/models/product-recognition/
+frontend/android/.gradle/
+frontend/android/local.properties
+frontend/android/**/build/
+frontend/ios/App/App/public/
+frontend/ios/App/App/capacitor.config.json
+frontend/ios/App/App.xcodeproj/project.xcworkspace/xcuserdata/
+frontend/ios/App/App.xcodeproj/xcuserdata/
+.vercel/
+frontend/.vercel/
+frontend/vercel.generated.json
+*.keystore
+*.jks
 data/downloads/
 data/extracted/
 __pycache__/
@@ -64,6 +77,8 @@ data/metadata/paired_collection.csv
 *.log
 *.tmp
 *.bak
+releases/
+frontend/public/downloads/*.apk
 .DS_Store
 Thumbs.db
 desktop.ini

@@ -30,12 +30,33 @@ class OCRResultOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ProductAlternativeOut(BaseModel):
+    name: str
+    category: str | None = None
+    similarity: float
+
+
+class LabelDetailsOut(BaseModel):
+    package_size: str | None = None
+    ingredients: str | None = None
+    allergens: str | None = None
+    storage_instructions: str | None = None
+    nutrition_text: str | None = None
+
+
 class ProductRecognitionOut(BaseModel):
     category: str | None = None
     product_name: str | None = None
     confidence: float | None = None
     evidence: list[str] = Field(default_factory=list)
-    source: Literal["package_text", "user_label", "unrecognized"] = "unrecognized"
+    source: Literal["package_text", "image_model", "image_and_text", "user_label", "unrecognized"] = "unrecognized"
+    status: str = "unrecognized"
+    confidence_kind: str | None = None
+    model: str | None = None
+    packaging: str | None = None
+    alternatives: list[ProductAlternativeOut] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+    label_details: LabelDetailsOut | None = None
 
 
 class AssessmentOut(BaseModel):

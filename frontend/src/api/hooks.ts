@@ -8,6 +8,8 @@ import {
 } from "@tanstack/react-query";
 import { z } from "zod";
 import { apiClient } from "./client";
+import { prepareScanImage } from "./scan-image";
+import { saveNativeSession } from "../native/session";
 import type { WorkspaceMode } from "../context/WorkspaceModeContext";
 
 /* ---------- Schemas ---------- */
@@ -84,7 +86,20 @@ const NestedScanSchema = z.object({
     product_name: z.string().nullable().optional(),
     confidence: z.number().nullable().optional(),
     evidence: z.array(z.string()).optional().default([]),
-    source: z.enum(["package_text", "user_label", "unrecognized"]).optional().default("unrecognized")
+    source: z.enum(["package_text", "image_model", "image_and_text", "user_label", "unrecognized"]).optional().default("unrecognized"),
+    status: z.string().optional(),
+    confidence_kind: z.string().nullable().optional(),
+    model: z.string().nullable().optional(),
+    packaging: z.string().nullable().optional(),
+    alternatives: z.array(z.object({ name: z.string(), category: z.string().nullable(), similarity: z.number() })).optional(),
+    limitations: z.array(z.string()).optional(),
+    label_details: z.object({
+      package_size: z.string().nullable().optional(),
+      ingredients: z.string().nullable().optional(),
+      allergens: z.string().nullable().optional(),
+      storage_instructions: z.string().nullable().optional(),
+      nutrition_text: z.string().nullable().optional()
+    }).nullable().optional()
   }).optional(),
   notes: z.string().optional().nullable(),
   created_at: z.string(),
@@ -433,12 +448,24 @@ interface LoginInput {
   password: string;
 }
 
+async function establishSession(endpoint: string, input: LoginInput | RegisterInput): Promise<AuthResponse> {
+  const response = await apiClient.post(endpoint, input);
+  const session = AuthResponseSchema.parse(response.data);
+  await saveNativeSession(session.access_token);
+  try {
+    const me = UserSchema.parse((await apiClient.get("/auth/me")).data);
+    if (session.user && me.id !== session.user.id) throw new Error("Session identity mismatch");
+    return { ...session, user: me };
+  } catch {
+    throw new Error("The account details were accepted, but your sign-in session could not be confirmed. Please sign in again using this app’s address.");
+  }
+}
+
 export function useLogin(): UseMutationResult<AuthResponse, Error, LoginInput> {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: LoginInput) => {
-      const res = await apiClient.post("/auth/login", input);
-      return AuthResponseSchema.parse(res.data);
+      return establishSession("/auth/login", input);
     },
     onSuccess: (data) => {
       qc.removeQueries();
@@ -458,8 +485,7 @@ export function useRegister(): UseMutationResult<AuthResponse, Error, RegisterIn
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: RegisterInput) => {
-      const res = await apiClient.post("/auth/register", input);
-      return AuthResponseSchema.parse(res.data);
+      return establishSession("/auth/register", input);
     },
     onSuccess: (data) => {
       qc.removeQueries();
@@ -486,7 +512,8 @@ export function useCreateScan(): UseMutationResult<Scan, Error, CreateScanInput>
   return useMutation({
     mutationFn: async (input: CreateScanInput) => {
       const form = new FormData();
-      form.append("file", input.image, input.image.name || "capture.jpg");
+      const image = await prepareScanImage(input.image);
+      form.append("file", image, image.name || "capture.jpg");
       if (input.tracked_item_id) form.append("tracked_item_id", input.tracked_item_id);
       if (input.new_item_name) form.append("new_item_name", input.new_item_name);
       if (input.food_type) form.append("food_type", input.food_type);

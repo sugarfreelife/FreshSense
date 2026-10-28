@@ -2,12 +2,14 @@ import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
+import process from "node:process";
 
 export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
     VitePWA({
+      disable: process.env.VITE_NATIVE_BUILD === "1",
       registerType: "autoUpdate",
       includeAssets: ["icons/icon-192.svg", "icons/icon-512.svg", "offline.html"],
       manifest: {
@@ -43,12 +45,13 @@ export default defineConfig({
       },
       workbox: {
         importScripts: ["notification-click.js"],
-        navigateFallback: "/offline.html",
+        navigateFallback: "/index.html",
+        navigateFallbackDenylist: [/^\/api\//, /^\/downloads\//],
         globPatterns: ["**/*.{js,css,html,svg,png,ico}"],
         runtimeCaching: [
           {
             urlPattern: ({ url, request }) =>
-              !url.pathname.startsWith("/api/") && (
+              !url.pathname.startsWith("/api/") && !url.pathname.startsWith("/downloads/") && (
                 request.destination === "document" ||
                 request.destination === "script" ||
                 request.destination === "style" ||
@@ -70,10 +73,23 @@ export default defineConfig({
     })
   ],
   server: {
-    port: 5173
+    port: 5173,
+    // Keep browser sessions on the page's origin, including localhost and LAN access.
+    proxy: {
+      "/api": {
+        target: process.env.VITE_API_PROXY_TARGET || "http://127.0.0.1:8000",
+        changeOrigin: true,
+        timeout: 180_000,
+        proxyTimeout: 180_000
+      }
+    }
   },
   test: {
     environment: "jsdom",
+    // Newer Node versions expose storage globals that shadow jsdom's storage.
+    execArgv: process.allowedNodeEnvironmentFlags.has("--no-experimental-webstorage")
+      ? ["--no-experimental-webstorage"]
+      : [],
     globals: true,
     setupFiles: ["./src/test-setup.ts"]
   }

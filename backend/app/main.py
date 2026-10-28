@@ -19,6 +19,8 @@ if settings.sqlalchemy_url.startswith("sqlite:"):
     inventory_columns = {column["name"] for column in inspect(engine).get_columns("inventory_items")}
     scan_columns = {column["name"] for column in inspect(engine).get_columns("food_scans")}
     with engine.begin() as connection:
+        if "product_recognition" not in scan_columns:
+            connection.execute(text("ALTER TABLE food_scans ADD COLUMN product_recognition TEXT"))
         if "provider" not in ocr_columns:
             connection.execute(
                 text("ALTER TABLE ocr_results ADD COLUMN provider VARCHAR(50) NOT NULL DEFAULT 'legacy'")

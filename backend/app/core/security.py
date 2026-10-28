@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
+from uuid import uuid4
 
 import jwt
 from jwt.exceptions import InvalidTokenError
@@ -26,7 +27,7 @@ def create_access_token(subject: str, expires_minutes: int | None = None) -> str
         minutes=expires_minutes if expires_minutes is not None else settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
     return jwt.encode(
-        {"sub": subject, "exp": expire},
+        {"sub": subject, "exp": expire, "jti": str(uuid4())},
         settings.JWT_SECRET,
         algorithm=settings.JWT_ALGORITHM,
     )

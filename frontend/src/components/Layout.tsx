@@ -5,6 +5,7 @@ import { apiClient } from "../api/client";
 import { useToast } from "./Toast";
 import BottomNav from "./BottomNav";
 import { useWorkspaceMode } from "../context/WorkspaceModeContext";
+import { clearNativeSession } from "../native/session";
 
 function OfflineBanner() {
   const online = typeof navigator === "undefined" ? true : navigator.onLine;
@@ -35,6 +36,7 @@ export default function Layout({
   const handleLogout = async () => {
     try {
       await apiClient.post("/auth/logout");
+      await clearNativeSession();
     } catch {
       push("Could not sign out. Check your connection and try again.", "error");
       return;
@@ -47,7 +49,7 @@ export default function Layout({
   return (
     <div className="flex min-h-dvh flex-col bg-slate-50">
       <OfflineBanner />
-      <header className="border-b border-slate-200 bg-white">
+      <header className="border-b border-slate-200 bg-white pt-[env(safe-area-inset-top)]">
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <Link to="/" className="flex items-center gap-2" aria-label="FreshSense AI home">
             <img src="/icons/icon-192.svg" alt="" className="h-7 w-7" />

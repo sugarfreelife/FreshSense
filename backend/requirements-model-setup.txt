@@ -1,0 +1,3 @@
+# Only needed when preparing CLIP food-description embeddings.
+-r requirements-production.txt
+tokenizers>=0.22,<1

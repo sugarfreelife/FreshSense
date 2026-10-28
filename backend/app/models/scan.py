@@ -26,6 +26,7 @@ class FoodScan(Base):
     image_path: Mapped[str] = mapped_column(String(1024), nullable=False)
     food_label: Mapped[str | None] = mapped_column(String(255), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    product_recognition: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
 
     vision: Mapped["VisionPrediction | None"] = relationship(back_populates="scan", cascade="all, delete-orphan", uselist=False)

@@ -96,7 +96,11 @@ if (phoneMode) {
 }
 console.log("Press Ctrl+C to stop both services.");
 
-const frontendEnv = { ...process.env, VITE_API_URL: `http://${bindHost}:${apiPort}/api/v1` };
+const frontendEnv = {
+  ...process.env,
+  VITE_API_URL: "/api/v1",
+  VITE_API_PROXY_TARGET: `http://${bindHost}:${apiPort}`,
+};
 const backendEnv = {
   ...process.env,
   CORS_ORIGINS: [

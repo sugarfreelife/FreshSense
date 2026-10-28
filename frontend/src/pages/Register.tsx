@@ -4,8 +4,10 @@ import { useRegister } from "../api/hooks";
 import Layout from "../components/Layout";
 import { useToast } from "../components/Toast";
 import axios from "axios";
+import { useWorkspaceMode } from "../context/WorkspaceModeContext";
 
 function registrationError(error: unknown): string {
+  if (error instanceof Error && !axios.isAxiosError(error)) return error.message;
   if (axios.isAxiosError(error)) {
     const status = error.response?.status;
     const detail = error.response?.data?.detail;
@@ -29,6 +31,7 @@ export default function Register() {
   const navigate = useNavigate();
   const { push } = useToast();
   const register = useRegister();
+  const workspace = useWorkspaceMode();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -44,6 +47,8 @@ export default function Register() {
       { name: name.trim(), email: email.trim(), password },
       {
         onSuccess: () => {
+          workspace.setMode("personal");
+          workspace.setWorkspaceId(null);
           push("Account created.", "success");
           navigate("/dashboard");
         },

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "uv run --python 3.14 --no-project python backend/scripts/setup_product_recognition.py && npm --prefix frontend ci && npm --prefix frontend run build",
+  "outputDirectory": "frontend/dist",
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 300,
+      "includeFiles": "backend/{app/**,alembic/**,models/product-recognition/{catalog.json,candidate_embeddings.npy,preprocessor_config.json}}",
+      "excludeFiles": "{.vercel_python_packages/**,.venv/**,frontend/**,backend/tests/**,backend/uploads/**,backend/.venv/**,backend/models/product-recognition/*.onnx,backend/models/product-recognition/tokenizer.json,data/**,docs/**,.git/**}"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/downloads/FreshSense.apk",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/vnd.android.package-archive"
+        },
+        {
+          "key": "Content-Disposition",
+          "value": "attachment; filename=\"FreshSense.apk\""
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    }
+  ]
+}

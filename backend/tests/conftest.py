@@ -21,6 +21,8 @@ elif not test_database.drivername.startswith("sqlite"):
 # even when backend/.env points at the developer's application database.
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ.setdefault("JWT_SECRET", "test-only-secret-for-freshsense-at-least-32-bytes")
+# Real model checks run separately from isolated unit/API suites.
+os.environ.setdefault("PRODUCT_RECOGNITION_ENABLED", "false")
 
 import app.core.database as database
 from app.core.deps import get_db

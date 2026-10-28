@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.core.deps import get_current_user
 from app.ml.vision.inference import predict_image
 from app.models.user import User
+from app.schemas.scan import ProductRecognitionOut
 from app.utils.files import MAX_FILE_SIZE_BYTES, validate_size
 from app.utils.images import normalize_uploaded_image
 
@@ -23,6 +24,7 @@ class VisionResult(BaseModel):
     confidence_kind: str
     visual_evidence: dict[str, float]
     validation_accuracy: float | None = None
+    product_recognition: ProductRecognitionOut | None = None
 
 
 @router.post("/vision", response_model=VisionResult)

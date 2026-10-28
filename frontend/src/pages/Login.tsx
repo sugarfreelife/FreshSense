@@ -3,11 +3,22 @@ import { Link, useNavigate } from "react-router-dom";
 import { useLogin } from "../api/hooks";
 import Layout from "../components/Layout";
 import { useToast } from "../components/Toast";
+import axios from "axios";
+import { useWorkspaceMode } from "../context/WorkspaceModeContext";
+
+function loginError(error: Error): string {
+  if (!axios.isAxiosError(error)) return error.message;
+  if (!error.response) return "The server could not be reached. Check your connection and try again.";
+  if (error.response.status === 401) return "Sign in failed. Check your email and password.";
+  if (error.response.status === 429) return "Too many sign-in attempts. Wait a minute and try again.";
+  return "Sign in is temporarily unavailable. Please try again.";
+}
 
 export default function Login() {
   const navigate = useNavigate();
   const { push } = useToast();
   const login = useLogin();
+  const workspace = useWorkspaceMode();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -22,10 +33,12 @@ export default function Login() {
       { email: email.trim(), password },
       {
         onSuccess: () => {
+          workspace.setMode("personal");
+          workspace.setWorkspaceId(null);
           push("Signed in.", "success");
           navigate("/dashboard");
         },
-        onError: () => push("Sign in failed. Check your credentials.", "error")
+        onError: (error) => push(loginError(error), "error")
       }
     );
   };
@@ -61,7 +74,7 @@ export default function Login() {
         </label>
         {login.isError && (
           <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-            Sign in failed. Please check your email and password.
+            {loginError(login.error)}
           </p>
         )}
         <button

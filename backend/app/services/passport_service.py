@@ -52,7 +52,7 @@ def _next_evidence_action(
         return {
             "key": "identify_product",
             "title": "Identify this product",
-            "detail": "The package text did not give a supported category. Add the product name and category so future scans can stay with the right item.",
+            "detail": "The photo and readable label text did not establish a food category. Add a clearer photo of the food or front label, or enter the product details.",
             "action_label": "Add product details",
             "target": "pantry",
         }
@@ -175,8 +175,16 @@ def build_passport(
     product_name = product.get("product_name")
     product_source = product.get("source", "unrecognized")
     if category:
-        product_state = "used" if product_source == "package_text" else "context"
-        if product_source == "package_text":
+        product_state = "used" if product_source in {"package_text", "image_model", "image_and_text"} else "context"
+        if product_source in {"image_model", "image_and_text"}:
+            observation = f"The image suggests {product_name or category} ({category})."
+            explanation = "A pretrained CLIP model compared the photo with food descriptions. Image similarity is not a calibrated probability."
+            if product_source == "image_and_text":
+                explanation += " Text read from the package supports the same category."
+            if product.get("status") == "uncertain":
+                product_state = "context"
+                explanation += " This match is tentative; check the alternatives."
+        elif product_source == "package_text":
             matched = ", ".join(product.get("evidence") or [])
             observation = f"Package text suggests {category}" + (f" ({matched})" if matched else "") + "."
             explanation = "The category was matched from text read on the package; it is a label-based estimate."
@@ -189,7 +197,7 @@ def build_passport(
         explanation = "The printed text is retained below so the category match can be checked."
     else:
         product_state = "missing"
-        observation = "No product category could be identified from visible package text."
+        observation = "The photo and readable package text did not establish a product category."
         explanation = "A clear photo of the product name or front label helps identify packaged items."
     evidence.append({
         "key": "product",
@@ -203,7 +211,9 @@ def build_passport(
         "title": "Product category checked",
         "state": "complete" if category else "missing",
         "detail": (
-            f"{category} matched from package text."
+            f"{category} suggested by the image model."
+            if product_source in {"image_model", "image_and_text"} and category
+            else f"{category} matched from package text."
             if product_source == "package_text" and category
             else f"{category} supplied as the user label."
             if category

@@ -48,7 +48,7 @@ export default function ScanForm({
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
-      setFormError("Image must be smaller than 10 MB.");
+      setFormError("Image must be smaller than 10 MB. Choose a smaller photo and retry.");
       return;
     }
     setImage(file);
